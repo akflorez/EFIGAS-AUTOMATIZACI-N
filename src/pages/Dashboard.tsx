@@ -23,16 +23,19 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ onLogout }: DashboardProps) {
-  const [activeTab, setActiveTab] = useState('procesar');
+  const [activeTab, setActiveTab] = useState<string>('procesar');
   const [disponiblesFechas, setDisponiblesFechas] = useState<string[]>([]);
   const [fechaInicio, setFechaInicio] = useState<string>('');
   const [fechaFin, setFechaFin] = useState<string>('');
-  const [files, setFiles] = useState<{
+  
+  type DashboardFiles = {
     movilidad: FileStatus;
     terreno: FileStatus;
     master: FileStatus;
     maestro: FileStatus;
-  }>({
+  };
+
+  const [files, setFiles] = useState<DashboardFiles>({
     movilidad: { loaded: false, name: '', data: [] },
     terreno: { loaded: false, name: '', data: [] },
     master: { loaded: false, name: '', data: [], secondaryData: [] },
@@ -50,7 +53,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     if (!file) return;
 
     // Feedback inmediato de carga
-    setFiles(prev => {
+    setFiles((prev: DashboardFiles) => {
       const next = { ...prev };
       if (type === 'movilidad') next.movilidad = { ...next.movilidad, name: file.name, loaded: false, error: 'Leyendo archivo...' };
       if (type === 'terreno') next.terreno = { ...next.terreno, name: file.name, loaded: false, error: 'Leyendo archivo...' };
@@ -76,7 +79,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           const convData = convSheetName ? XLSX.utils.sheet_to_json(wb.Sheets[convSheetName]) : [];
           const baseData = baseSheetName ? XLSX.utils.sheet_to_json(wb.Sheets[baseSheetName]) : [];
           
-          setFiles(prev => ({
+          setFiles((prev: DashboardFiles) => ({
             ...prev,
             master: { 
               loaded: true, 
@@ -98,7 +101,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           }
           
           if (data.length === 0) {
-             setFiles(prev => ({
+             setFiles((prev: DashboardFiles) => ({
                ...prev,
                [type]: { ...prev[type], name: file.name, error: 'Archivo sin datos en ninguna pestaña' }
              }));
@@ -136,11 +139,11 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             return dateStr;
           }))).filter(d => !!d).sort() as string[];
 
-          setDisponiblesFechas(prev => Array.from(new Set([...prev, ...uniqueDates])).sort());
+          setDisponiblesFechas((prev: string[]) => Array.from(new Set([...prev, ...uniqueDates])).sort());
           setFechaInicio('');
           setFechaFin('');
 
-          setFiles(prev => ({
+          setFiles((prev: DashboardFiles) => ({
             ...prev,
             [type]: { loaded: true, name: file.name, data, error: undefined }
           }));
@@ -154,13 +157,13 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               break;
             }
           }
-          setFiles(prev => ({
+          setFiles((prev: DashboardFiles) => ({
             ...prev,
             maestro: { loaded: true, name: file.name, data, error: undefined }
           }));
         }
           } catch (e) {
-             setFiles(prev => {
+             setFiles((prev: DashboardFiles) => {
                const next = { ...prev };
                if (type === 'movilidad') next.movilidad = { ...next.movilidad, error: 'Error al parsear XLSX' };
                if (type === 'terreno') next.terreno = { ...next.terreno, error: 'Error al parsear XLSX' };
@@ -173,7 +176,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       };
       reader.readAsBinaryString(file);
     } catch (err) {
-      setFiles(prev => {
+      setFiles((prev: DashboardFiles) => {
         const next = { ...prev };
         if (type === 'movilidad') next.movilidad = { ...next.movilidad, error: 'Error al leer archivo' };
         if (type === 'terreno') next.terreno = { ...next.terreno, error: 'Error al leer archivo' };
@@ -238,7 +241,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   };
 
   const removeFile = (type: 'movilidad' | 'terreno' | 'master' | 'maestro') => {
-    setFiles(prev => ({
+    setFiles((prev: DashboardFiles) => ({
       ...prev,
       [type]: { loaded: false, name: '', data: [], secondaryData: type === 'master' ? [] : undefined }
     }));
@@ -267,7 +270,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   };
 
   const updateRegistro = (id: string, updates: Partial<RegistroNormalizado>) => {
-    setResultados(prev => prev.map(r => r.id_sistema === id ? { ...r, ...updates } : r));
+    setResultados((prev: RegistroNormalizado[]) => prev.map(r => r.id_sistema === id ? { ...r, ...updates } : r));
   };
 
   const exportCSV = () => {
@@ -590,7 +593,14 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   );
 }
 
-function NavItem({ active, onClick, icon, label }: any) {
+interface NavItemProps {
+  active: boolean;
+  onClick: () => void;
+  icon: ReactNode;
+  label: string;
+}
+
+function NavItem({ active, onClick, icon, label }: NavItemProps) {
   return (
     <div 
       onClick={onClick}
