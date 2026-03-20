@@ -192,7 +192,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     
     setProcessing(true);
     setProgress(5);
-    setStatusMessage('Iniciando Motor v46.8 (Efigas)...');
+    setStatusMessage('Iniciando Motor v46.9 (Efigas)...');
 
     try {
       // Instanciar motor
@@ -237,6 +237,35 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
   };
 
+  const removeFile = (type: 'movilidad' | 'terreno' | 'master' | 'maestro') => {
+    setFiles(prev => ({
+      ...prev,
+      [type]: { loaded: false, name: '', data: [], secondaryData: type === 'master' ? [] : undefined }
+    }));
+    // Si borramos un fuente, también borramos resultados e historial de fechas
+    if (type === 'movilidad' || type === 'terreno') {
+      setResultados([]);
+      setDisponiblesFechas([]);
+      setFechaInicio('');
+      setFechaFin('');
+    }
+  };
+
+  const clearAll = () => {
+    setFiles({
+      movilidad: { loaded: false, name: '', data: [] },
+      terreno: { loaded: false, name: '', data: [] },
+      master: { loaded: false, name: '', data: [], secondaryData: [] },
+      maestro: { loaded: false, name: '', data: [] },
+    });
+    setResultados([]);
+    setDisponiblesFechas([]);
+    setFechaInicio('');
+    setFechaFin('');
+    setStatusMessage('');
+    setProgress(0);
+  };
+
   const updateRegistro = (id: string, updates: Partial<RegistroNormalizado>) => {
     setResultados(prev => prev.map(r => r.id_sistema === id ? { ...r, ...updates } : r));
   };
@@ -255,7 +284,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `visitas_v46.8.csv`);
+    link.setAttribute("download", `visitas_v46.9.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -310,7 +339,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       <main className="flex-1 ml-72 p-10 animate-premium">
         <header className="flex justify-between items-center mb-10">
           <div>
-            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Generador de Visitas v46</h2>
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Generador de Visitas v46.9</h2>
             <div className="flex items-center gap-2 text-slate-500 text-sm mt-1">
                <span>Operaciones</span>
                <ChevronRight size={14} />
@@ -326,6 +355,16 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-tighter leading-none mb-1">Usuario Efigas</p>
                 <p className="text-sm font-black text-slate-800 leading-none">Operador Senior</p>
              </div>
+             
+             {Object.values(files).some(f => f.loaded) && (
+               <button 
+                 onClick={clearAll}
+                 className="ml-4 p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 transition-colors"
+                 title="Reiniciar Todo"
+               >
+                 <LogOut size={18} className="rotate-180" />
+               </button>
+             )}
           </div>
         </header>
 
@@ -399,6 +438,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 icon={<Database size={24} />}
                 status={files.movilidad}
                 onUpload={(e: ChangeEvent<HTMLInputElement>) => handleFileUpload(e, 'movilidad')}
+                onRemove={() => removeFile('movilidad')}
                 accent="blue"
               />
               <FileCard 
@@ -406,6 +446,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 icon={<ClipboardList size={24} />}
                 status={files.terreno}
                 onUpload={(e: ChangeEvent<HTMLInputElement>) => handleFileUpload(e, 'terreno')}
+                onRemove={() => removeFile('terreno')}
                 accent="green"
               />
               <FileCard 
@@ -413,6 +454,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 icon={<AlertCircle size={24} />}
                 status={files.master}
                 onUpload={(e: ChangeEvent<HTMLInputElement>) => handleFileUpload(e, 'master')}
+                onRemove={() => removeFile('master')}
                 accent="amber"
                 description="Debe contener CONV y BASE GENERAL"
               />
@@ -496,7 +538,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                              onClick={exportCSV}
                              className="btn-premium bg-gradient-to-r from-emerald-600 to-emerald-700 shadow-emerald-500/20 flex items-center justify-center gap-3 px-8"
                            >
-                             <Download size={20} /> Exportar Libro de Visitas CSV v45
+                             <Download size={20} /> Exportar Libro de Visitas CSV v46.9
                            </button>
                          </div>
                     </div>
@@ -566,11 +608,12 @@ interface FileCardProps {
   icon: ReactNode;
   status: FileStatus;
   onUpload: (e: ChangeEvent<HTMLInputElement>) => void;
+  onRemove: () => void;
   accent?: 'blue' | 'green' | 'amber' | 'slate';
   description?: string;
 }
 
-function FileCard({ title, icon, status, onUpload, accent, description }: FileCardProps) {
+function FileCard({ title, icon, status, onUpload, onRemove, accent, description }: FileCardProps) {
   const accentClasses = {
     blue: 'border-blue-500/20 text-blue-600 bg-blue-50',
     green: 'border-emerald-500/20 text-emerald-600 bg-emerald-50',
@@ -608,9 +651,16 @@ function FileCard({ title, icon, status, onUpload, accent, description }: FileCa
         </label>
       ) : (
         <div className="flex items-center gap-3 p-3 bg-emerald-50 border border-emerald-100 rounded-xl">
-           <FileCheck size={16} className="text-emerald-600" />
-           <span className="text-xs font-bold text-emerald-700 truncate flex-1">{status.name}</span>
-        </div>
+            <FileCheck size={16} className="text-emerald-600" />
+            <span className="text-xs font-bold text-emerald-700 truncate flex-1">{status.name}</span>
+            <button 
+              onClick={onRemove}
+              className="p-1.5 bg-red-100 text-red-600 rounded-lg hover:bg-red-200 transition-colors ml-2"
+              title="Borrar archivo"
+            >
+              <LogOut size={12} className="rotate-180" />
+            </button>
+         </div>
       )}
     </div>
   );
