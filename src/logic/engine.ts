@@ -246,7 +246,7 @@ export class ProcessingEngine {
       identificacion_valida: !!base,
       perfil_maestro: perfil,
       cedula_maestra: (this.getFieldValue(base, ["CEDULA"]) || '').toString(),
-      telefono_maestro: (this.getFieldValue(row, ["celular personal", "celular_personal"]) || '').toString(),
+      telefono_maestro: (this.getFieldValue(row, ["Celular de persona que atendió", "celular personal", "celular_personal"]) || '').toString(),
       comentarios_concatenados: comments
     };
   }
