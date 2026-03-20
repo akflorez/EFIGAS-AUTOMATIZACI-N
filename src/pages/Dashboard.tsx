@@ -466,6 +466,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                  icon={<Settings size={24} />}
                  status={files.maestro}
                  onUpload={(e: ChangeEvent<HTMLInputElement>) => handleFileUpload(e, 'maestro')}
+                onRemove={() => removeFile('maestro')}
                  accent="slate"
                  description="MAESTROS PERFIL Y MOTIVOS NO PAGOS"
                />
