@@ -43,6 +43,7 @@ export default function ReviewTable({ data, onUpdate }: Props) {
               <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Motivo Original</th>
               <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Perfil Maestro</th>
               <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Causal Homologada</th>
+              <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Celular</th>
               <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400 text-center">Acción</th>
             </tr>
           </thead>
@@ -107,6 +108,15 @@ export default function ReviewTable({ data, onUpdate }: Props) {
                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-tighter">COD:</span>
                        <span className="text-[9px] font-mono font-bold text-slate-600">{reg.codigo_causal || '--'}</span>
                     </div>
+                  </div>
+                </td>
+                <td className="px-6 py-5">
+                  <div className="flex flex-col gap-1.5">
+                    <EditableField 
+                      value={reg.telefono_maestro || ''} 
+                      onSave={(v) => onUpdate(reg.id_sistema, { telefono_maestro: v, editado_manualmente: true })} 
+                    />
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Num. Marcado</div>
                   </div>
                 </td>
                 <td className="px-6 py-5 text-center">

@@ -16,9 +16,10 @@ export class ProcessingEngine {
     if (!row) return undefined;
     const keys = Object.keys(row);
     const foundKey = keys.find(k => {
-      const cleanK = k.toLowerCase().replace(/\s/g, '').trim();
+      // Normalización agresiva: minúsculas, sin espacios, sin comillas, sin símbolos raros
+      const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, '').trim();
       return searchTerms.some(term => {
-        const cleanTerm = term.toLowerCase().replace(/\s/g, '').trim();
+        const cleanTerm = term.toLowerCase().replace(/[^a-z0-9]/g, '').trim();
         return cleanK === cleanTerm || cleanK.includes(cleanTerm);
       });
     });
