@@ -192,7 +192,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     
     setProcessing(true);
     setProgress(5);
-    setStatusMessage('Iniciando Motor v46.7 (Efigas)...');
+    setStatusMessage('Iniciando Motor v46.8 (Efigas)...');
 
     try {
       // Instanciar motor
@@ -255,7 +255,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `visitas_v46.7.csv`);
+    link.setAttribute("download", `visitas_v46.8.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

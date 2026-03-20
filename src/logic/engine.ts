@@ -245,7 +245,7 @@ export class ProcessingEngine {
       identificacion_valida: !!base,
       perfil_maestro: perfil,
       cedula_maestra: (this.getFieldValue(base, ["CEDULA"]) || '').toString(),
-      telefono_maestro: (this.getFieldValue(base, ["MEJOR NUMERO MARCADO"]) || '').toString(),
+      telefono_maestro: (this.getFieldValue(row, ["numeromarcado", "telefono"]) || '').toString(),
       comentarios_concatenados: comments
     };
   }
@@ -285,7 +285,7 @@ export class ProcessingEngine {
       identificacion_valida: !!base,
       perfil_maestro: perfil,
       cedula_maestra: (this.getFieldValue(base, ["CEDULA"]) || '').toString(),
-      telefono_maestro: (this.getFieldValue(base, ["MEJOR NUMERO MARCADO"]) || '').toString(),
+      telefono_maestro: (this.getFieldValue(row, ["TELEFONO NUEVO", "telefono"]) || '').toString(),
       comentarios_concatenados: observacion
     };
   }
