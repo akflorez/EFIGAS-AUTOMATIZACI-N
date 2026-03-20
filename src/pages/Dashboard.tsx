@@ -195,7 +195,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     
     setProcessing(true);
     setProgress(5);
-    setStatusMessage('Iniciando Motor v46.9 (Efigas)...');
+    setStatusMessage('Iniciando Motor v46.9.3 (Efigas)...');
 
     try {
       // Instanciar motor
@@ -287,7 +287,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.setAttribute("href", url);
-    link.setAttribute("download", `visitas_v46.9.csv`);
+    link.setAttribute("download", `visitas_v46.9.3.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -342,7 +342,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       <main className="flex-1 ml-72 p-10 animate-premium">
         <header className="flex justify-between items-center mb-10">
           <div>
-            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Generador de Visitas v46.9</h2>
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Generador de Visitas v46.9.3</h2>
             <div className="flex items-center gap-2 text-slate-500 text-sm mt-1">
                <span>Operaciones</span>
                <ChevronRight size={14} />
