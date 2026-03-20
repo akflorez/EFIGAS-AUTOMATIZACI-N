@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+.env
+*.xlsx
+*.xls
+*.csv
+research/
+temp/
+*.log
+.DS_Store
+client/node_modules/
+client/dist/
+package-lock.json
+client/package-lock.json
