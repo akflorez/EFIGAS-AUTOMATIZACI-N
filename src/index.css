@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+@theme {
+  --color-efigas-primary: #0057b7;
+  --color-efigas-secondary: #fdb913;
+  --color-efigas-success: #10b981;
+  --color-efigas-warning: #f59e0b;
+  --color-efigas-error: #ef4444;
+  --color-efigas-info: #3b82f6;
+  --color-surface-light: #f8fafc;
+  --color-surface-dark: #0f172a;
+  
+  --shadow-premium: 0 10px 30px -5px rgba(0, 0, 0, 0.04), 0 4px 10px -2px rgba(0, 0, 0, 0.02);
+  --shadow-glass: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+  --radius-premium: 1.5rem;
+}
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 antialiased font-sans;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-white/70 backdrop-blur-xl border border-white/20 shadow-glass rounded-premium;
+  }
+
+  .card-premium {
+    @apply bg-white rounded-premium shadow-premium border border-slate-100 p-6 transition-all duration-500 hover:shadow-xl hover:translate-y-[-2px];
+  }
+  
+  .sidebar-item {
+    @apply flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 cursor-pointer font-medium text-slate-500 hover:bg-white hover:text-efigas-primary hover:shadow-sm;
+  }
+
+  .sidebar-item-active {
+    @apply flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 cursor-pointer font-bold text-efigas-primary bg-white shadow-sm;
+  }
+
+  .btn-premium {
+    @apply px-6 py-3 bg-gradient-to-r from-efigas-primary to-blue-600 text-white rounded-xl font-bold tracking-tight shadow-lg shadow-blue-500/20 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50;
+  }
+  
+  .table-container {
+    @apply overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm;
+  }
+
+  .animate-premium {
+    animation: slideIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Custom scrollbar premium */
+::-webkit-scrollbar {
+  width: 5px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-slate-100;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-300 rounded-full hover:bg-slate-400;
+}
+
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-200 rounded-full hover:bg-slate-300;
+}
