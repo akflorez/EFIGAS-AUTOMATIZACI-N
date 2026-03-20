@@ -209,7 +209,7 @@ export class ProcessingEngine {
   }
 
   private homologateMovilidad(row: any): RegistroNormalizado {
-    const product = (this.getFieldValue(row, ["Producto", "CUENTA"]) || '').toString().trim();
+    const product = (this.getFieldValue(row, ["Producto", "CUENTA", "CONTRATO", "IDENTIFICACION", "INSTALACION", "SOLICITUD"]) || '').toString().trim();
     const base = this.baseGeneral.get(product);
     const comments = this.consolidateMovilidadComments(row);
     const causalRaw = (this.getFieldValue(row, ["Causal"]) || '').toString().trim();
@@ -295,8 +295,6 @@ export class ProcessingEngine {
     const results: RegistroNormalizado[] = [];
     
     movilidadData.forEach(row => {
-      const comments = this.consolidateMovilidadComments(row);
-      if (!comments) return;
       const dateStr = this.extractDateFromRow(row);
       if (start && dateStr && dateStr < start) return;
       if (end && dateStr && dateStr > end) return;
