@@ -209,7 +209,7 @@ export class ProcessingEngine {
   }
 
   private homologateMovilidad(row: any): RegistroNormalizado {
-    const product = (this.getFieldValue(row, ["Producto", "CUENTA", "CONTRATO", "IDENTIFICACION", "INSTALACION", "SOLICITUD"]) || '').toString().trim();
+    const product = (this.getFieldValue(row, ["Producto", "CUENTA"]) || '').toString().trim();
     const base = this.baseGeneral.get(product);
     const comments = this.consolidateMovilidadComments(row);
     const causalRaw = (this.getFieldValue(row, ["Causal"]) || '').toString().trim();
@@ -246,7 +246,7 @@ export class ProcessingEngine {
       identificacion_valida: !!base,
       perfil_maestro: perfil,
       cedula_maestra: (this.getFieldValue(base, ["CEDULA"]) || '').toString(),
-      telefono_maestro: (this.getFieldValue(row, ["celular personal", "celular_personal", "numeromarcado", "telefono"]) || '').toString(),
+      telefono_maestro: (this.getFieldValue(row, ["celular personal", "celular_personal"]) || '').toString(),
       comentarios_concatenados: comments
     };
   }
@@ -272,6 +272,8 @@ export class ProcessingEngine {
       producto: product,
       cliente: (this.getFieldValue(base, ["NOMBRE"]) || '').toString(),
       direccion: (this.getFieldValue(base, ["DIRECCION"]) || '').toString(),
+      cedula_maestra: (this.getFieldValue(base, ["CEDULA"]) || '').toString(),
+      telefono_maestro: (this.getFieldValue(row, ["telefono nuevo", "nuevo_telefono", "telefono_nuevo", "nuevo telefono"]) || '').toString(),
       causal: observacion.toUpperCase(), // Gestión = Observación pura
       codigo_causal: codeM,
       tipo_comentario: '',
@@ -285,8 +287,6 @@ export class ProcessingEngine {
       fuente_principal: 'terreno',
       identificacion_valida: !!base,
       perfil_maestro: perfil,
-      cedula_maestra: (this.getFieldValue(base, ["CEDULA"]) || '').toString(),
-      telefono_maestro: (this.getFieldValue(row, ["TELEFONO NUEVO", "telefono"]) || '').toString(),
       comentarios_concatenados: observacion
     };
   }
