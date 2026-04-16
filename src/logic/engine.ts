@@ -17,18 +17,24 @@ export class ProcessingEngine {
     if (!row) return undefined;
     const keys = Object.keys(row);
     
-    // Primero, buscar coincidencias EXACTAS respetando la prioridad de searchTerms
+    // Primero, buscar coincidencias EXACTAS (normalizadas) respetando la prioridad de searchTerms
     for (const term of searchTerms) {
       const cleanTerm = this.normalizeText(term).replace(/\s+/g, '');
-      const foundKey = keys.find(k => this.normalizeText(k).replace(/\s+/g, '') === cleanTerm);
+      const foundKey = keys.find(k => {
+        const ck = this.normalizeText(k).replace(/\s+/g, '');
+        return ck === cleanTerm;
+      });
       if (foundKey) return row[foundKey];
     }
     
-    // Segundo, buscar si ALGUNA llave o encabezado CONTIENE el término, respetando la prioridad
+    // Segundo, buscar si ALGUNA llave o encabezado CONTIENE el término (Fuzzy matching por inclusión)
     for (const term of searchTerms) {
       const cleanTerm = this.normalizeText(term).replace(/\s+/g, '');
-      if (cleanTerm.length < 4) continue; // Evitar matches confusos de letras sueltas
-      const foundKey = keys.find(k => this.normalizeText(k).replace(/\s+/g, '').includes(cleanTerm));
+      if (cleanTerm.length < 4) continue; 
+      const foundKey = keys.find(k => {
+        const ck = this.normalizeText(k).replace(/\s+/g, '');
+        return ck.includes(cleanTerm) || cleanTerm.includes(ck);
+      });
       if (foundKey) return row[foundKey];
     }
     
@@ -36,17 +42,47 @@ export class ProcessingEngine {
   }
 
   public async indexBaseGeneral(data: BaseGeneralRaw[], onProgress: (p: number) => void) {
-    if (!data || !Array.isArray(data)) { onProgress(100); return; }
     const total = data.length;
     if (total === 0) { onProgress(100); return; }
     
+    // Auto-detección de Header: Si la primera fila es "Unnamed" o similar, 
+    // buscamos una fila de datos que pueda servir de mapeo si las llaves originales no sirven.
+    // Pero en JS, sheet_to_json ya fijó las llaves. Si las llaves son 'Unnamed: 0', 
+    // intentaremos buscar los valores reales en las primeras 10 filas para re-mapear.
+    let headerRowIndex = -1;
+    const sampleSize = Math.min(data.length, 20);
+    for (let i = 0; i < sampleSize; i++) {
+      const vals = Object.values(data[i]).map(v => this.normalizeText(v?.toString() || ""));
+      if (vals.includes('producto') || vals.includes('contrato') || (vals.includes('cuenta') && vals.includes('nombre'))) {
+        headerRowIndex = i;
+        break;
+      }
+    }
+
     const chunkSize = 10000;
     for (let i = 0; i < total; i += chunkSize) {
       const end = Math.min(i + chunkSize, total);
       for (let j = i; j < end; j++) {
         const row = data[j];
-        if (!row) continue;
-        const key = (this.getFieldValue(row, ["PRODUCTO", "CUENTA"]) || '').toString().trim();
+        if (!row || j <= headerRowIndex) continue;
+
+        let key = '';
+        if (headerRowIndex !== -1) {
+          // Si detectamos un header interno, los datos de 'row' actuales tienen llaves tipo 'Unnamed'
+          // Pero los valores de la fila 'headerRowIndex' nos dicen qué es cada cosa.
+          const headerValues = data[headerRowIndex];
+          const keys = Object.keys(row);
+          for (const k of keys) {
+            const hVal = this.normalizeText(headerValues[k]?.toString() || "");
+            if (hVal === 'producto' || hVal === 'cuenta') {
+              key = (row[k] || '').toString().trim();
+              break;
+            }
+          }
+        } else {
+          key = (this.getFieldValue(row, ["PRODUCTO", "CUENTA"]) || '').toString().trim();
+        }
+
         if (key) this.baseGeneral.set(key, row);
       }
       onProgress(Math.floor((i / total) * 100));
@@ -80,7 +116,14 @@ export class ProcessingEngine {
         }
         
         if (text) {
-          if (per) this.movCausalToPerfilMap.set(text, per);
+          if (per) {
+            this.movCausalToPerfilMap.set(text, per);
+            // Indexar también por palabras clave largas para mejorar matches parciales
+            const words = text.split(' ').filter(w => w.length > 5);
+            words.forEach(w => {
+              if (!this.movCausalToPerfilMap.has(w)) this.movCausalToPerfilMap.set(w, per);
+            });
+          }
           if (mot) this.terMotivoToCVSMap.set(text, mot);
           if (motCode) this.terMotivoToCodeMap.set(text, motCode);
         }
@@ -274,8 +317,22 @@ export class ProcessingEngine {
     const codeM = this.extractCode(motivoNP);
     const normM = this.normalizeText(motivoNP.replace(codeM, ''));
 
-    // Perfil Terreno: SÍ cruzado con el maestro (Trae MEJOR PERFIL EN CVS)
-    let perfil = this.movCausalToPerfilMap.get(codeM) || this.movCausalToPerfilMap.get(normM) || 'REVISIÓN MANUAL';
+    // Perfil Terreno: SÍ cruzado con el maestro
+    let perfil = this.movCausalToPerfilMap.get(codeM) || this.movCausalToPerfilMap.get(normM);
+    
+    // Mejora: Si no hay perfil en el mapa, intentamos extraer palabras clave del motivo
+    if (!perfil && normM) {
+      const words = normM.split(' ').filter(w => w.length > 4); 
+      for (const word of words) {
+        if (this.movCausalToPerfilMap.has(word)) {
+          perfil = this.movCausalToPerfilMap.get(word);
+          break;
+        }
+      }
+    }
+
+    // Si aún así no hay, usamos un fallback inteligente o la etiqueta original antes de REVISIÓN MANUAL
+    perfil = perfil || motivoNP.toUpperCase() || 'REVISIÓN MANUAL';
     
     // Motivo Terreno: Si existe en el maestro (MOTIVO PAGO CVS), lo usamos. Si no, literal.
     let motivoCVS = this.terMotivoToCVSMap.get(codeM) || this.terMotivoToCVSMap.get(normM) || motivoNP.toUpperCase();
@@ -297,7 +354,7 @@ export class ProcessingEngine {
       motivo_no_pago_consolidado: motivoCVS,
       fecha_gestion: this.extractDateFromRow(row) || '',
       estado_cruce: 'automatico',
-      estado_homologacion: this.terMotivoToCVSMap.has(codeM) || this.terMotivoToCVSMap.has(normM) ? 'exitosa' : 'pendiente',
+      estado_homologacion: perfil && perfil !== 'REVISIÓN MANUAL' ? 'exitosa' : 'pendiente',
       editado_manualmente: false,
       fuente_principal: 'terreno',
       identificacion_valida: !!base,
