@@ -8,6 +8,7 @@ export class ProcessingEngine {
   private movCausalToPerfilMap: Map<string, string> = new Map();
   private terMotivoToPerfilMap: Map<string, string> = new Map();
   private terMotivoToCVSMap: Map<string, string> = new Map();
+  private terMotivoToCodeMap: Map<string, string> = new Map();
   
   constructor() {
   }
@@ -15,15 +16,23 @@ export class ProcessingEngine {
   private getFieldValue(row: any, searchTerms: string[]): any {
     if (!row) return undefined;
     const keys = Object.keys(row);
-    const foundKey = keys.find(k => {
-      // Normalización agresiva: minúsculas, sin espacios, sin comillas, sin símbolos raros
-      const cleanK = k.toLowerCase().replace(/[^a-z0-9]/g, '').trim();
-      return searchTerms.some(term => {
-        const cleanTerm = term.toLowerCase().replace(/[^a-z0-9]/g, '').trim();
-        return cleanK === cleanTerm || cleanK.includes(cleanTerm);
-      });
-    });
-    return foundKey ? row[foundKey] : undefined;
+    
+    // Primero, buscar coincidencias EXACTAS respetando la prioridad de searchTerms
+    for (const term of searchTerms) {
+      const cleanTerm = this.normalizeText(term).replace(/\s+/g, '');
+      const foundKey = keys.find(k => this.normalizeText(k).replace(/\s+/g, '') === cleanTerm);
+      if (foundKey) return row[foundKey];
+    }
+    
+    // Segundo, buscar si ALGUNA llave o encabezado CONTIENE el término, respetando la prioridad
+    for (const term of searchTerms) {
+      const cleanTerm = this.normalizeText(term).replace(/\s+/g, '');
+      if (cleanTerm.length < 4) continue; // Evitar matches confusos de letras sueltas
+      const foundKey = keys.find(k => this.normalizeText(k).replace(/\s+/g, '').includes(cleanTerm));
+      if (foundKey) return row[foundKey];
+    }
+    
+    return undefined;
   }
 
   public async indexBaseGeneral(data: BaseGeneralRaw[], onProgress: (p: number) => void) {
@@ -50,10 +59,12 @@ export class ProcessingEngine {
     this.movCausalToPerfilMap.clear();
     this.terMotivoToPerfilMap.clear();
     this.terMotivoToCVSMap.clear();
+    this.terMotivoToCodeMap.clear();
 
     maestroData.forEach(row => {
       const per = (this.getFieldValue(row, ['MEJOR PERFIL EN CVS', 'MEJOR PERFIL']) || '').toString().toUpperCase().trim();
       const mot = (this.getFieldValue(row, ['MOTIVO DE NO PAGO CVS']) || '').toString().toUpperCase().trim();
+      const motCode = this.extractCode(mot);
 
       // Recolectar TODAS las celdas de esta fila para buscar códigos y textos
       const allVals = Object.values(row).map(v => v?.toString() || "");
@@ -65,11 +76,13 @@ export class ProcessingEngine {
         if (code) {
           if (per) this.movCausalToPerfilMap.set(code, per);
           if (mot) this.terMotivoToCVSMap.set(code, mot);
+          if (motCode) this.terMotivoToCodeMap.set(code, motCode);
         }
         
         if (text) {
           if (per) this.movCausalToPerfilMap.set(text, per);
           if (mot) this.terMotivoToCVSMap.set(text, mot);
+          if (motCode) this.terMotivoToCodeMap.set(text, motCode);
         }
       });
     });
@@ -223,8 +236,9 @@ export class ProcessingEngine {
     // Intentamos buscarlo en el maestro para el "Mejor Perfil", si no, el label de la causal
     let perfil = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(normText) || causalLabel || 'REVISIÓN MANUAL';
     
-    // Motivo de No Pago: CONCAT(Tipo Comentarios) + Código (v46 audio)
-    const motivoNP = `${comments} ${idCausal}`.trim().toUpperCase();
+    // Motivo de No Pago: CONCAT(Tipo Comentarios) + Código del de no pago (v46 audio corregido)
+    const mappedMotCode = this.terMotivoToCodeMap.get(idCausal) || this.terMotivoToCodeMap.get(normText) || idCausal;
+    const motivoNP = `${comments} ${mappedMotCode}`.trim().toUpperCase();
 
     return {
       id_sistema: `MOV-${product}-${Date.now()}`,
@@ -233,7 +247,7 @@ export class ProcessingEngine {
       cliente: (this.getFieldValue(base, ["NOMBRE"]) || '').toString(),
       direccion: (this.getFieldValue(base, ["DIRECCION"]) || '').toString(),
       causal: observacion.toUpperCase(), // Gestión = Observación pura
-      codigo_causal: idCausal,
+      codigo_causal: mappedMotCode, // CORRECCIÓN: Usar código de no pago
       tipo_comentario: '',
       codigo_tipo_comentario: '',
       motivo_no_pago_original: comments,
@@ -246,7 +260,7 @@ export class ProcessingEngine {
       identificacion_valida: !!base,
       perfil_maestro: perfil,
       cedula_maestra: (this.getFieldValue(base, ["CEDULA"]) || '').toString(),
-      telefono_maestro: (this.getFieldValue(row, ["Celular de persona que atendió", "celular personal", "celular_personal"]) || '').toString(),
+      telefono_maestro: (this.getFieldValue(row, ["celular de la persona que atendió", "Celular de persona que atendió", "celular persona que atendio", "Celular de la persona que atendio", "celular personal", "celular_personal", "numero marca", "numero de celular", "celular", "telefono", "numero contacto", "telefono nuevo para el cvs"]) || '').toString(),
       comentarios_concatenados: comments
     };
   }
@@ -265,6 +279,7 @@ export class ProcessingEngine {
     
     // Motivo Terreno: Si existe en el maestro (MOTIVO PAGO CVS), lo usamos. Si no, literal.
     let motivoCVS = this.terMotivoToCVSMap.get(codeM) || this.terMotivoToCVSMap.get(normM) || motivoNP.toUpperCase();
+    let mappedMotCode = this.terMotivoToCodeMap.get(codeM) || this.terMotivoToCodeMap.get(normM) || codeM;
 
     return {
       id_sistema: `TER-${product}-${Date.now()}`,
@@ -273,9 +288,9 @@ export class ProcessingEngine {
       cliente: (this.getFieldValue(base, ["NOMBRE"]) || '').toString(),
       direccion: (this.getFieldValue(base, ["DIRECCION"]) || '').toString(),
       cedula_maestra: (this.getFieldValue(base, ["CEDULA"]) || '').toString(),
-      telefono_maestro: (this.getFieldValue(row, ["telefono nuevo", "nuevo_telefono", "telefono_nuevo", "nuevo telefono"]) || '').toString(),
+      telefono_maestro: (this.getFieldValue(row, ["telefono nuevo para el cvs", "telefono nuevo", "nuevo_telefono", "telefono_nuevo", "nuevo telefono", "celular de la persona que atendió", "Celular de persona que atendió", "celular nuevo", "numero marcar", "telefono adicional", "celular", "telefono", "numero adicional"]) || '').toString(),
       causal: observacion.toUpperCase(), // Gestión = Observación pura
-      codigo_causal: codeM,
+      codigo_causal: mappedMotCode, // CORRECCIÓN: Usar código de no pago
       tipo_comentario: '',
       codigo_tipo_comentario: '',
       motivo_no_pago_original: motivoNP,
