@@ -846,9 +846,12 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                               
                               try {
                                  const engine = new LegalizationEngine();
-                                 const templateUrl = '/templates/Plantilla_Legalización_masíva.xls';
+                                 const templateUrl = '/templates/Plantilla_Legalizacion_masiva.xls';
                                  
                                  const response = await fetch(templateUrl);
+                                 if (!response.ok) {
+                                    throw new Error(`No se pudo cargar la plantilla desde el servidor (${response.status}). Verifique que el archivo exista en public/templates/`);
+                                 }
                                  const templateBuffer = await response.arrayBuffer();
                                  
                                  setStatusMessage(`Procesando Tipo: ${selectedLegalizationTipo}...`);
