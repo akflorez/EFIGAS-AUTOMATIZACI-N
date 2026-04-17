@@ -69,7 +69,10 @@ export class ReportEngine {
       targetRow.getCell(73).value = baseRow[92];
 
       // --- BO (67) Extraer código de BN (66). Evitar Cédulas (más de 5 dígitos) ---
-      const bnValue = baseRow[81]?.toString() || '';
+      let bnValue = baseRow[81]?.toString() || '';
+      // Corrección específica: 1474 -> 1473
+      bnValue = bnValue.replace(/No Contesta - Numero Activo 1474/g, 'No Contesta - Numero Activo 1473');
+      
       const bnMatch = bnValue.match(/\b\d{1,5}\b/g); // Busca números de 1 a 5 dígitos únicamente
       if (bnMatch) {
         targetRow.getCell(67).value = bnMatch[bnMatch.length - 1];
@@ -77,7 +80,10 @@ export class ReportEngine {
 
       // --- BQ (69) Extraer código de BP ---
       // BP (68) mantiene el texto completo de Base CC (80)
-      const bpBaseValue = baseRow[80]?.toString() || '';
+      let bpBaseValue = baseRow[80]?.toString() || '';
+      // Corrección específica: 1474 -> 1473
+      bpBaseValue = bpBaseValue.replace(/No Contesta - Numero Activo 1474/g, 'No Contesta - Numero Activo 1473');
+      
       targetRow.getCell(68).value = bpBaseValue; 
       
       const bpMatch = bpBaseValue.match(/\b\d{1,5}\b/g); 

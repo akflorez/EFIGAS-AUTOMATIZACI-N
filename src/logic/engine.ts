@@ -268,7 +268,10 @@ export class ProcessingEngine {
     const product = (this.getFieldValue(row, ["Producto", "CUENTA"]) || '').toString().trim();
     const base = this.baseGeneral.get(product);
     const comments = this.consolidateMovilidadComments(row);
-    const causalRaw = (this.getFieldValue(row, ["Causal"]) || '').toString().trim();
+    let causalRaw = (this.getFieldValue(row, ["Causal"]) || '').toString().trim();
+    // Corrección específica: 1474 -> 1473
+    causalRaw = causalRaw.replace(/No Contesta - Numero Activo 1474/g, 'No Contesta - Numero Activo 1473');
+    
     const observacion = (this.getFieldValue(row, ["Observación", "Observacion"]) || '').toString().trim();
     
     const idCausal = this.extractCode(causalRaw);
@@ -311,7 +314,10 @@ export class ProcessingEngine {
   private homologateTerreno(row: any): RegistroNormalizado {
     const product = (this.getFieldValue(row, ["PRODUCTO", "CUENTA"]) || '').toString().trim();
     const base = this.baseGeneral.get(product);
-    const motivoNP = (this.getFieldValue(row, ["MOTIVO DE NO PAGO ", "MOTIVO DE NO PAGO", "Motivo"]) || '').toString().trim();
+    let motivoNP = (this.getFieldValue(row, ["MOTIVO DE NO PAGO ", "MOTIVO DE NO PAGO", "Motivo"]) || '').toString().trim();
+    // Corrección específica: 1474 -> 1473
+    motivoNP = motivoNP.replace(/No Contesta - Numero Activo 1474/g, 'No Contesta - Numero Activo 1473');
+    
     const observacion = (this.getFieldValue(row, ["OBSERVACIONES", "Observacion", "Observación"]) || '').toString().trim();
 
     const codeM = this.extractCode(motivoNP);
