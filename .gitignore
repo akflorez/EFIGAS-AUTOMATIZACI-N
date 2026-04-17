@@ -2,8 +2,11 @@ node_modules/
 dist/
 build/
 .env
-*.xlsx
-*.xls
+# Ignorar archivos temporales de Excel pero permitir plantillas
+~$*.xlsx
+~$*.xls
+!public/templates/*.xlsx
+!public/templates/*.xls
 *.csv
 research/
 temp/
