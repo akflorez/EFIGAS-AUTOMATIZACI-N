@@ -7,7 +7,7 @@ import { ReportEngine } from '../logic/reportEngine';
 import { 
   Upload, FileCheck, AlertCircle, Play, Download, 
   Settings, Database, ClipboardList, PackageCheck,
-  Home, LogOut, ChevronRight, BarChart3,
+  LogOut, ChevronRight, BarChart3,
   Layers, User as UserIcon, Calendar, AlertTriangle
 } from 'lucide-react';
 
@@ -46,8 +46,9 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState('');
-  const [ resultados, setResultados] = useState< RegistroNormalizado []>([]);
+  const [resultados, setResultados] = useState<RegistroNormalizado[]>([]);
   const [showOnlyInvalid, setShowOnlyInvalid] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   const handleFileUpload = async (e: ChangeEvent<HTMLInputElement>, type: 'movilidad' | 'terreno' | 'master' | 'maestro') => {
     const file = e.target.files?.[0];
@@ -314,43 +315,42 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         </div>
       )}
 
-      <aside className="w-72 bg-[#0a1118] text-white flex flex-col p-6 fixed h-full z-20 shadow-2xl">
-        <div className="mb-12 px-2">
-          <div className="flex items-center gap-3 mb-2">
+      <aside className={`${isSidebarCollapsed ? 'w-20' : 'w-72'} bg-[#0a1118] text-white flex flex-col p-6 fixed h-full z-20 shadow-2xl transition-all duration-300 ease-in-out border-r border-white/5`}>
+        <div className="mb-12 px-2 flex items-center justify-between">
+          <div className={`flex items-center gap-3 ${isSidebarCollapsed ? 'hidden' : 'flex'}`}>
              <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
                 <Layers className="text-black" size={24} />
              </div>
-             <h1 className="text-xl font-black tracking-tighter">EMDECOB</h1>
+             <div>
+               <h1 className="text-xl font-black tracking-tighter">EMDECOB</h1>
+               <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest leading-none">Efigas Masivo</p>
+             </div>
           </div>
-          <p className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest pl-1">Efigas Masivo</p>
+          <button 
+            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            className="p-2 hover:bg-white/10 rounded-lg transition-colors text-white/50 hover:text-white"
+          >
+            {isSidebarCollapsed ? <ChevronRight size={20} /> : <div className="flex items-center gap-1"><ChevronRight size={20} className="rotate-180" /></div>}
+          </button>
         </div>
 
         <nav className="flex-1 space-y-2">
           <NavItem 
             active={activeTab === 'procesar'} 
             onClick={() => setActiveTab('procesar')} 
-            icon={<Home size={20} />} 
-            label="Procesamiento" 
+            icon={<Database size={20} />} 
+            label="Visitas Terreno" 
+            collapsed={isSidebarCollapsed}
           />
-          <NavItem 
-            active={activeTab === 'historial'} 
-            onClick={() => setActiveTab('historial')} 
-            icon={<BarChart3 size={20} />} 
-            label="Estadísticas" 
-          />
-          <NavItem 
-            active={activeTab === 'config'} 
-            onClick={() => setActiveTab('config')} 
-            icon={<Settings size={20} />} 
-            label="Configuración" 
-          />
+          
           <div className="pt-4 mt-4 border-t border-white/5">
-             <p className="px-4 text-[10px] font-black text-white/30 uppercase tracking-widest mb-4">Herramientas</p>
+             <p className={`px-4 text-[10px] font-black text-white/30 uppercase tracking-widest mb-4 ${isSidebarCollapsed ? 'hidden' : 'block'}`}>Herramientas</p>
              <NavItem 
                active={activeTab === 'reporte'} 
                onClick={() => setActiveTab('reporte')} 
                icon={<FileCheck size={20} className={activeTab === 'reporte' ? "text-emerald-400" : "text-white/40"} />} 
-               label="Generar Informe" 
+               label="Informe de Casuales" 
+               collapsed={isSidebarCollapsed}
              />
           </div>
         </nav>
@@ -360,12 +360,12 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             onClick={onLogout}
             className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-white/5 hover:text-white transition-all w-full font-medium"
           >
-            <LogOut size={20} /> Cerrar Sesión
+            <LogOut size={20} /> {!isSidebarCollapsed && <span>Cerrar Sesión</span>}
           </button>
         </div>
       </aside>
 
-      <main className="flex-1 ml-72 p-10 animate-premium">
+      <main className={`flex-1 ${isSidebarCollapsed ? 'ml-20' : 'ml-72'} p-10 animate-premium transition-all duration-300`}>
         <header className="flex justify-between items-center mb-10">
           <div>
             <h2 className="text-3xl font-black text-slate-900 tracking-tight">Generador de Visitas v46.9.8</h2>
@@ -679,7 +679,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                                  setStatusMessage('Mapeando datos a la plantilla (B:BI -> A:BH)...');
                                  setProgress(30);
                                  
-                                 const buffer = await engine.generateReport(
+                                 const result = await engine.generateReport(
                                     files.master.secondaryData || [],
                                     files.master.data || [],
                                     templateUrl
@@ -688,7 +688,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                                  setProgress(90);
                                  setStatusMessage('Preparando descarga...');
                                  
-                                 const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                                 const blob = new Blob([result.excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
                                  const url = URL.createObjectURL(blob);
                                  const link = document.createElement('a');
                                  link.href = url;
@@ -696,6 +696,19 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                                  document.body.appendChild(link);
                                  link.click();
                                  document.body.removeChild(link);
+
+                                 // 2. Descargar TXT de Comentarios Masivos
+                                 if (result.txtContent) {
+                                   const dateStr = new Date().toISOString().split('T')[0];
+                                   const txtBlob = new Blob([result.txtContent], { type: 'text/plain;charset=utf-8' });
+                                   const txtUrl = URL.createObjectURL(txtBlob);
+                                   const txtLink = document.createElement('a');
+                                   txtLink.href = txtUrl;
+                                   txtLink.download = `comentarios_masivos_${dateStr}.txt`;
+                                   document.body.appendChild(txtLink);
+                                   txtLink.click();
+                                   document.body.removeChild(txtLink);
+                                 }
                                  
                                  setProgress(100);
                                  setStatusMessage('¡Informe generado con éxito!');
@@ -712,7 +725,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                            disabled={!files.master.loaded || processing}
                            className="btn-premium px-12 py-5 bg-gradient-to-r from-emerald-500 to-emerald-600 border-none shadow-emerald-500/40 text-lg hover:scale-105 transition-all disabled:opacity-50 disabled:grayscale"
                          >
-                            {processing ? 'Procesando...' : 'Generar Informe Ahora'}
+                            {processing ? 'Procesando...' : 'Generar Informe de Casuales'}
                          </button>
                       </div>
                    </div>
@@ -742,17 +755,21 @@ interface NavItemProps {
   onClick: () => void;
   icon: ReactNode;
   label: string;
+  collapsed?: boolean;
 }
 
-function NavItem({ active, onClick, icon, label }: NavItemProps) {
+function NavItem({ active, onClick, icon, label, collapsed }: NavItemProps) {
   return (
     <div 
       onClick={onClick}
-      className={active ? "sidebar-item-active" : "sidebar-item text-white/50 hover:bg-white/5"}
+      className={`${active ? 'sidebar-item-active ring-1 ring-white/10' : 'sidebar-item text-white/50 hover:bg-white/5'} ${collapsed ? 'justify-center px-0' : ''}`}
+      title={collapsed ? label : ''}
     >
-      {icon}
-      <span>{label}</span>
-      {active && <div className="ml-auto w-1.5 h-1.5 bg-efigas-primary rounded-full"></div>}
+      <div className={`${active ? 'text-emerald-400' : 'text-slate-400'} transition-colors`}>{icon}</div>
+      {!collapsed && <span className="font-bold text-sm tracking-tight">{label}</span>}
+      {active && !collapsed && (
+        <div className="ml-auto w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse shadow-glow shadow-emerald-500/50"></div>
+      )}
     </div>
   );
 }

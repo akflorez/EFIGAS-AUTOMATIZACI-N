@@ -109,6 +109,30 @@ export class ReportEngine {
       }
     }
 
-    return await workbook.xlsx.writeBuffer();
+    // 6. Generate TXT content for COMENTARIOS MASIVO
+    let txtContent = '';
+    if (commentsSheet) {
+      for (let i = 0; i < baseGeneralRaw.length - 1; i++) {
+        const sourceRow = targetSheet.getRow(8 + i);
+        // A (1): Orden, B (2): Código, C (3): Observación
+        const orden = sourceRow.getCell(7).value?.toString() || '';
+        const codigo = targetSheet.getRow(8 + i).getCell(67).value?.toString() || '';
+        const observacion = targetSheet.getRow(8 + i).getCell(70).value?.toString() || '';
+
+        if (orden) {
+          // Limpieza solicitada: eliminar {}, " y usar //
+          const cleanOrden = orden.replace(/[{}]/g, '').replace(/"/g, '').trim();
+          const cleanCodigo = codigo.replace(/[{}]/g, '').replace(/"/g, '').trim();
+          const cleanObservacion = observacion.replace(/[{}]/g, '').replace(/"/g, '').trim();
+          
+          txtContent += `${cleanOrden} // ${cleanCodigo} // ${cleanObservacion}\n`;
+        }
+      }
+    }
+
+    return {
+      excelBuffer: await workbook.xlsx.writeBuffer(),
+      txtContent
+    };
   }
 }
