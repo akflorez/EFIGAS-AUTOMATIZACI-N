@@ -21,12 +21,10 @@ export class ReportEngine {
 
     if (!originalSheet) throw new Error(`No se encontró la pestaña "${originalSheetName}" en la plantilla.`);
 
-    // 2. Duplicate Sheet
-    const newSheetName = 'Informe Procesado';
-    const newSheet = workbook.addWorksheet(newSheetName);
-    this.copyWorksheet(originalSheet, newSheet);
+    // 2. Use the original template sheet directly
+    const targetSheet = originalSheet;
     
-    // 3. Process New Sheet (A partir de fila 8)
+    // 3. Process Sheet (A partir de fila 8)
     // baseGeneralRaw index 0 might be headers if not skipped. 
     // Usually user says "a partir de fila 8" in template, but base general is just data.
     baseGeneralRaw.forEach((baseRow, index) => {
@@ -34,7 +32,7 @@ export class ReportEngine {
       if (index === 0) return;
       
       const templateRowNumber = 8 + (index - 1);
-      const targetRow = newSheet.getRow(templateRowNumber);
+      const targetRow = targetSheet.getRow(templateRowNumber);
 
       // --- Main Mapping: Base B:BI (indices 1-60) -> Template A:BH (indices 1-60) ---
       for (let col = 1; col <= 60; col++) {
@@ -97,7 +95,7 @@ export class ReportEngine {
     // 5. Update COMENTARIOS MASIVO (Preserving Formulas)
     if (commentsSheet) {
       for (let i = 0; i < baseGeneralRaw.length - 1; i++) {
-        const sourceRow = newSheet.getRow(8 + i);
+        const sourceRow = targetSheet.getRow(8 + i);
         const targetRow = commentsSheet.getRow(3 + i);
 
         // A (1): numero de orden ← G (7)
@@ -112,35 +110,5 @@ export class ReportEngine {
     }
 
     return await workbook.xlsx.writeBuffer();
-  }
-
-  /**
-   * Deep copy of a worksheet including styles and merges
-   */
-  private copyWorksheet(source: ExcelJS.Worksheet, target: ExcelJS.Worksheet) {
-    // Copy column widths
-    source.columns?.forEach((col, i) => {
-      if (col.width) target.getColumn(i + 1).width = col.width;
-    });
-
-    // Copy rows and cells
-    source.eachRow({ includeEmpty: true }, (row, rowNumber) => {
-      const targetRow = target.getRow(rowNumber);
-      targetRow.height = row.height;
-      
-      row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-        const targetCell = targetRow.getCell(colNumber);
-        targetCell.value = cell.value;
-        targetCell.style = JSON.parse(JSON.stringify(cell.style)); // Deep copy style
-      });
-      targetRow.commit();
-    });
-
-    // Copy merges
-    // source._merges is internal, we use model.merges if available or loop through known ranges
-    const merges = (source as any).model.merges || [];
-    merges.forEach((m: string) => {
-      target.mergeCells(m);
-    });
   }
 }
