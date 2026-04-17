@@ -67,20 +67,29 @@ export class ReportEngine {
       targetRow.getCell(73).value = baseRow[92];
 
       // --- CONV Cruce (BO=67, BQ=69) ---
-      // We look for a match in the CONV slice. 
-      // User says "cruzando según motivo de no pago" and "mejor perfil".
-      // We'll search for the value of BO and BQ in the CONV table based on common values.
-      // Assuming Column 0 of CONV is the identifier to match against a value in our row
-      const searchKey = baseRow[43]?.toString().toUpperCase().trim(); // Example: Column AR (index 43) often has motive
-      
-      const match = convLookup.find(cRow => {
-        // Try to find the searchKey in the first 5 columns of the CONV row
-        return cRow.some(cell => cell?.toString().toUpperCase().trim() === searchKey);
-      });
+      // Identificamos dinámicamente la columna de motivo en la base general (buscando "MOTIVO DE NO PAGO" o similar)
+      const baseHeaders = baseGeneralRaw[0] || [];
+      const motivoColIndex = baseHeaders.findIndex(h => h?.toString().toUpperCase().includes('MOTIVO'));
+      const mejorPerfilColIndex = baseHeaders.findIndex(h => h?.toString().toUpperCase().includes('PERFIL'));
 
-      if (match) {
-        targetRow.getCell(67).value = match[5]; // CONV F (index 5) -> BO
-        targetRow.getCell(69).value = match[3]; // CONV D (index 3) -> BQ
+      // Usamos el índice encontrado o caemos en uno probable (AR=43, BP=68, etc.)
+      const searchKeyMotivo = (motivoColIndex !== -1 ? baseRow[motivoColIndex] : baseRow[43])?.toString().toUpperCase().trim();
+      const searchKeyPerfil = (mejorPerfilColIndex !== -1 ? baseRow[mejorPerfilColIndex] : baseRow[68])?.toString().toUpperCase().trim();
+      
+      const matchMotivo = convLookup.find(cRow => 
+        cRow.some(cell => cell?.toString().toUpperCase().trim() === searchKeyMotivo)
+      );
+      
+      const matchPerfil = convLookup.find(cRow => 
+        cRow.some(cell => cell?.toString().toUpperCase().trim() === searchKeyPerfil)
+      );
+
+      if (matchMotivo) {
+        targetRow.getCell(67).value = matchMotivo[5]; // CONV F (index 5) -> BO
+      }
+      
+      if (matchPerfil) {
+        targetRow.getCell(69).value = matchPerfil[3]; // CONV D (index 3) -> BQ
       }
 
       targetRow.commit();
