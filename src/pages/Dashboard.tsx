@@ -846,11 +846,13 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                               
                               try {
                                  const engine = new LegalizationEngine();
-                                 const templateUrl = '/templates/Plantilla_Legalizacion_masiva.xls';
+                                 const baseUrl = import.meta.env.BASE_URL || '/';
+                                 const templateUrl = `${baseUrl.endsWith('/') ? baseUrl : baseUrl + '/'}templates/Plantilla_Legalizacion_masiva.xls?v=${Date.now()}`;
                                  
+                                 console.log('Intentando cargar plantilla desde:', templateUrl);
                                  const response = await fetch(templateUrl);
                                  if (!response.ok) {
-                                    throw new Error(`No se pudo cargar la plantilla desde el servidor (${response.status}). Verifique que el archivo exista en public/templates/`);
+                                    throw new Error(`Error 404: No se encontró la plantilla en ${templateUrl}. Asegúrese de que el archivo se haya subido correctamente al servidor.`);
                                  }
                                  const templateBuffer = await response.arrayBuffer();
                                  
