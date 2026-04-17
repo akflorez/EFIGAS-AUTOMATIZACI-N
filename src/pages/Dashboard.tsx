@@ -3,6 +3,7 @@ import * as XLSX from 'xlsx';
 import { ProcessingEngine } from '../logic/engine';
 import type { RegistroNormalizado, BaseGeneralRaw } from '../types';
 import ReviewTable from '../components/ReviewTable';
+import { ReportEngine } from '../logic/reportEngine';
 import { 
   Upload, FileCheck, AlertCircle, Play, Download, 
   Settings, Database, ClipboardList, PackageCheck,
@@ -76,8 +77,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           const convSheetName = wb.SheetNames.find(n => n.toUpperCase().includes('CONV'));
           const baseSheetName = wb.SheetNames.find(n => n.toUpperCase() === 'BASE GENERAL');
           
-          const convData = convSheetName ? XLSX.utils.sheet_to_json(wb.Sheets[convSheetName]) : [];
-          const baseData = baseSheetName ? XLSX.utils.sheet_to_json(wb.Sheets[baseSheetName]) : [];
+          const convData = convSheetName ? XLSX.utils.sheet_to_json(wb.Sheets[convSheetName], { header: 1 }) : [];
+          const baseData = baseSheetName ? XLSX.utils.sheet_to_json(wb.Sheets[baseSheetName], { header: 1 }) : [];
           
           setFiles((prev: DashboardFiles) => ({
             ...prev,
@@ -297,6 +298,22 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans">
+      {/* Overlay de procesamiento para Reporte */}
+      {processing && activeTab === 'reporte' && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center animate-in fade-in duration-300">
+           <div className="bg-white p-12 rounded-3xl shadow-2xl max-w-lg w-full text-center">
+              <div className="w-20 h-20 bg-emerald-100 rounded-3xl flex items-center justify-center mx-auto mb-6">
+                 <div className="w-12 h-12 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+              </div>
+              <h3 className="text-2xl font-black text-slate-900 mb-2">Generando Informe Especial</h3>
+              <p className="text-emerald-600 font-bold text-sm uppercase tracking-widest mb-6">{statusMessage}</p>
+              <div className="w-full bg-slate-100 h-3 rounded-full overflow-hidden shadow-inner">
+                 <div className="h-full bg-emerald-500 transition-all duration-300" style={{ width: `${progress}%` }}></div>
+              </div>
+           </div>
+        </div>
+      )}
+
       <aside className="w-72 bg-[#0a1118] text-white flex flex-col p-6 fixed h-full z-20 shadow-2xl">
         <div className="mb-12 px-2">
           <div className="flex items-center gap-3 mb-2">
@@ -327,6 +344,15 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             icon={<Settings size={20} />} 
             label="Configuración" 
           />
+          <div className="pt-4 mt-4 border-t border-white/5">
+             <p className="px-4 text-[10px] font-black text-white/30 uppercase tracking-widest mb-4">Herramientas</p>
+             <NavItem 
+               active={activeTab === 'reporte'} 
+               onClick={() => setActiveTab('reporte')} 
+               icon={<FileCheck size={20} className={activeTab === 'reporte' ? "text-emerald-400" : "text-white/40"} />} 
+               label="Generar Informe" 
+             />
+          </div>
         </nav>
 
         <div className="mt-auto pt-6 border-t border-white/5">
@@ -582,6 +608,123 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                )}
             </section>
           </div>
+        ) : activeTab === 'reporte' ? (
+          <div className="space-y-8 animate-premium">
+             <div className="bg-white border border-slate-200 rounded-3xl p-10 shadow-sm overflow-hidden relative">
+                <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-50 rounded-full -mr-32 -mt-32 opacity-50"></div>
+                
+                <div className="relative z-10">
+                   <div className="flex items-center gap-4 mb-8">
+                      <div className="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                         <FileCheck size={32} className="text-white" />
+                      </div>
+                      <div>
+                         <h3 className="text-2xl font-black text-slate-900 tracking-tight">Generador de Informe de Gestión</h3>
+                         <p className="text-slate-500 font-medium">Cruce automático de Base General con Plantilla Oficial EMDECOB</p>
+                      </div>
+                   </div>
+
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
+                      <div className={`p-6 rounded-2xl border-2 transition-all ${files.master.loaded ? 'border-emerald-500 bg-emerald-50' : 'border-slate-100 bg-slate-50'}`}>
+                         <div className="flex items-center gap-3 mb-4">
+                            {files.master.loaded ? <FileCheck className="text-emerald-500" /> : <Database className="text-slate-400" />}
+                            <h4 className="font-black text-slate-800">Archivo Base (Master)</h4>
+                         </div>
+                         <p className="text-sm text-slate-500 mb-6">Contiene las pestañas <span className="font-bold">CONV</span> y <span className="font-bold">BASE GENERAL</span> requeridas para el cruce.</p>
+                         
+                         {!files.master.loaded ? (
+                            <label className="btn-secondary w-full py-3 flex justify-center cursor-pointer hover:bg-white bg-white">
+                               <input type="file" className="hidden" onChange={(e) => handleFileUpload(e, 'master')} />
+                               <Upload size={18} className="mr-2" /> Subir Master
+                            </label>
+                         ) : (
+                            <div className="flex items-center justify-between">
+                               <span className="text-xs font-bold text-emerald-700 truncate max-w-[200px]">{files.master.name}</span>
+                               <button onClick={() => removeFile('master')} className="text-red-500 hover:text-red-700 font-bold text-xs uppercase">Cambiar</button>
+                            </div>
+                         )}
+                      </div>
+
+                      <div className="p-6 rounded-2xl border-2 border-slate-100 bg-slate-50 opacity-60">
+                         <div className="flex items-center gap-3 mb-4">
+                            <Settings className="text-slate-400" />
+                            <h4 className="font-black text-slate-800">Plantilla de Salida</h4>
+                         </div>
+                         <p className="text-sm text-slate-500 mb-6">Usando versión precargada: <span className="font-bold">v2026.04.16 - Oficial</span></p>
+                         <div className="text-xs text-emerald-600 font-bold bg-emerald-100/50 py-2 px-3 rounded-lg flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></div>
+                            Lista para procesar
+                         </div>
+                      </div>
+                   </div>
+
+                   <div className="bg-slate-900 rounded-3xl p-10 text-white shadow-2xl relative overflow-hidden group">
+                      <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-br from-emerald-600/20 to-transparent pointer-events-none"></div>
+                      <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
+                         <div className="flex-1">
+                            <h4 className="text-xl font-black mb-2 tracking-tight">¿Todo listo para generar?</h4>
+                            <p className="text-slate-400 text-sm font-medium">Se procesarán {files.master.secondaryData?.length || 0} registros de la Base General. Se respetarán fórmulas y formatos originales de EMDECOB.</p>
+                         </div>
+                         <button 
+                           onClick={async () => {
+                              if (!files.master.loaded) return alert('Debe cargar el archivo Master primero.');
+                              setProcessing(true);
+                              setProgress(10);
+                              setStatusMessage('Inicializando exceljs y cargando plantilla...');
+                              
+                              try {
+                                 const engine = new ReportEngine();
+                                 const templateUrl = '/templates/plantilla_gestion.xlsx';
+                                 
+                                 setStatusMessage('Mapeando datos a la plantilla (B:BI -> A:BH)...');
+                                 setProgress(30);
+                                 
+                                 const buffer = await engine.generateReport(
+                                    files.master.secondaryData || [],
+                                    files.master.data || [],
+                                    templateUrl
+                                 );
+                                 
+                                 setProgress(90);
+                                 setStatusMessage('Preparando descarga...');
+                                 
+                                 const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+                                 const url = URL.createObjectURL(blob);
+                                 const link = document.createElement('a');
+                                 link.href = url;
+                                 link.download = `INFORME_GESTION_EMDECOB_${new Date().toISOString().split('T')[0]}.xlsx`;
+                                 document.body.appendChild(link);
+                                 link.click();
+                                 document.body.removeChild(link);
+                                 
+                                 setProgress(100);
+                                 setStatusMessage('¡Informe generado con éxito!');
+                                 setTimeout(() => {
+                                    setProcessing(false);
+                                    setProgress(0);
+                                 }, 1500);
+                              } catch (err: any) {
+                                 console.error(err);
+                                 alert('Error al generar el informe: ' + err.message);
+                                 setProcessing(false);
+                              }
+                           }}
+                           disabled={!files.master.loaded || processing}
+                           className="btn-premium px-12 py-5 bg-gradient-to-r from-emerald-500 to-emerald-600 border-none shadow-emerald-500/40 text-lg hover:scale-105 transition-all disabled:opacity-50 disabled:grayscale"
+                         >
+                            {processing ? 'Procesando...' : 'Generar Informe Ahora'}
+                         </button>
+                      </div>
+                   </div>
+                </div>
+             </div>
+
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <FeatureSmall icon={<Database size={18}/>} title="Fórmulas Intactas" desc="Preserva la columna D de comentarios masivos." />
+                <FeatureSmall icon={<Layers size={18}/>} title="Cruce de CONV" desc="Asigna BO y BQ según la tabla de conversión." />
+                <FeatureSmall icon={<ClipboardList size={18}/>} title="Formato EMDECOB" desc="Mantiene todas las pestañas ocultas originales." />
+             </div>
+          </div>
         ) : (
           <div className="glass-card p-20 text-center">
              <BarChart3 size={60} className="text-slate-200 mx-auto mb-6" />
@@ -693,6 +836,18 @@ function KPI({ label, value, color = "text-slate-900", onClick, active }: KPIPro
     >
       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{label}</p>
       <p className={`text-3xl font-black ${color} tracking-tight tabular-nums`}>{value}</p>
+    </div>
+  );
+}
+
+function FeatureSmall({ icon, title, desc }: { icon: any; title: string; desc: string }) {
+  return (
+    <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+      <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-600 mb-4">
+        {icon}
+      </div>
+      <h5 className="font-black text-slate-800 text-sm mb-1">{title}</h5>
+      <p className="text-xs text-slate-400 font-medium">{desc}</p>
     </div>
   );
 }
