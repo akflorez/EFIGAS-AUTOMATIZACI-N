@@ -92,7 +92,7 @@ export class ReportEngine {
       // Source: New Tab G(7), BO(67), BR(70)
       for (let i = 0; i < baseGeneralRaw.length - 1; i++) {
         const sourceRow = newSheet.getRow(8 + i);
-        const targetRow = commentsSheet.getRow(2 + i);
+        const targetRow = commentsSheet.getRow(3 + i);
 
         // A (1): numero de orden ← G (7)
         targetRow.getCell(1).value = sourceRow.getCell(7).value;
