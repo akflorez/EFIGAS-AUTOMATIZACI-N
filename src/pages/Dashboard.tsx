@@ -4,11 +4,13 @@ import { ProcessingEngine } from '../logic/engine';
 import type { RegistroNormalizado, BaseGeneralRaw } from '../types';
 import ReviewTable from '../components/ReviewTable';
 import { ReportEngine } from '../logic/reportEngine';
+import { LegalizationEngine } from '../logic/legalizationEngine';
 import { 
   Upload, FileCheck, AlertCircle, Play, Download, 
   Settings, Database, ClipboardList, PackageCheck,
   LogOut, ChevronRight, BarChart3,
-  Layers, User as UserIcon, Calendar, AlertTriangle
+  Layers, User as UserIcon, Calendar, AlertTriangle,
+  Gavel
 } from 'lucide-react';
 
 interface FileStatus {
@@ -24,7 +26,7 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ onLogout }: DashboardProps) {
-  const [activeTab, setActiveTab] = useState<string>('procesar');
+  const [activeTab, setActiveTab] = useState<'procesar' | 'reporte' | 'legalizacion'>('procesar');
   const [disponiblesFechas, setDisponiblesFechas] = useState<string[]>([]);
   const [fechaInicio, setFechaInicio] = useState<string>('');
   const [fechaFin, setFechaFin] = useState<string>('');
@@ -49,6 +51,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [resultados, setResultados] = useState<RegistroNormalizado[]>([]);
   const [showOnlyInvalid, setShowOnlyInvalid] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [selectedLegalizationTipo, setSelectedLegalizationTipo] = useState<string>('1367');
 
   const handleFileUpload = async (e: ChangeEvent<HTMLInputElement>, type: 'movilidad' | 'terreno' | 'master' | 'maestro') => {
     const file = e.target.files?.[0];
@@ -345,13 +348,20 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           
           <div className="pt-4 mt-4 border-t border-white/5">
              <p className={`px-4 text-[10px] font-black text-white/30 uppercase tracking-widest mb-4 ${isSidebarCollapsed ? 'hidden' : 'block'}`}>Herramientas</p>
-             <NavItem 
-               active={activeTab === 'reporte'} 
-               onClick={() => setActiveTab('reporte')} 
-               icon={<FileCheck size={20} className={activeTab === 'reporte' ? "text-emerald-400" : "text-white/40"} />} 
-               label="Informe de Casuales" 
-               collapsed={isSidebarCollapsed}
-             />
+              <NavItem 
+                active={activeTab === 'reporte'} 
+                onClick={() => setActiveTab('reporte')} 
+                icon={<FileCheck size={20} className={activeTab === 'reporte' ? "text-emerald-400" : "text-white/40"} />} 
+                label="Informe de Casuales" 
+                collapsed={isSidebarCollapsed}
+              />
+              <NavItem 
+                active={activeTab === 'legalizacion'} 
+                onClick={() => setActiveTab('legalizacion')} 
+                icon={<Gavel size={20} className={activeTab === 'legalizacion' ? "text-emerald-400" : "text-white/40"} />} 
+                label="Legalizaciones" 
+                collapsed={isSidebarCollapsed}
+              />
           </div>
         </nav>
 
@@ -736,6 +746,146 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 <FeatureSmall icon={<Database size={18}/>} title="Fórmulas Intactas" desc="Preserva la columna D de comentarios masivos." />
                 <FeatureSmall icon={<Layers size={18}/>} title="Cruce de CONV" desc="Asigna BO y BQ según la tabla de conversión." />
                 <FeatureSmall icon={<ClipboardList size={18}/>} title="Formato EMDECOB" desc="Mantiene todas las pestañas ocultas originales." />
+             </div>
+          </div>
+        ) : activeTab === 'legalizacion' ? (
+          <div className="space-y-8 max-w-6xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-700">
+             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="space-y-6">
+                   <div className="glass-card p-8 border-l-8 border-l-amber-500 overflow-visible relative">
+                      <div className="flex items-center justify-between mb-8">
+                         <div>
+                            <h3 className="text-2xl font-black text-slate-800 tracking-tight">Módulo de Legalización</h3>
+                            <p className="text-slate-400 text-sm font-medium">Filtro obligatorio por "Tipo" de base.</p>
+                         </div>
+                         <div className="w-14 h-14 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-500">
+                            <Gavel size={28} />
+                         </div>
+                      </div>
+
+                      <div className="space-y-4">
+                         <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">Seleccionar Tipo a Procesar</label>
+                         <div className="grid grid-cols-4 gap-2">
+                            {['1367', '1368', '1369', 'TODOS'].map(tipo => (
+                               <button 
+                                 key={tipo}
+                                 onClick={() => setSelectedLegalizationTipo(tipo)}
+                                 className={`py-3 px-4 rounded-xl text-xs font-bold transition-all border ${selectedLegalizationTipo === tipo ? 'bg-amber-500 text-white border-amber-600 shadow-lg shadow-amber-500/20' : 'bg-slate-50 text-slate-400 border-slate-100 hover:bg-slate-100'}`}
+                               >
+                                  {tipo}
+                               </button>
+                            ))}
+                         </div>
+                      </div>
+
+                      <div className="mt-8">
+                        <FileCard 
+                          title="Base General" 
+                          icon={<Database size={24} />} 
+                          status={files.master} 
+                          onUpload={(e) => handleFileUpload(e, 'master')} 
+                          onRemove={() => removeFile('master')}
+                          accent="amber"
+                          description="Se usará la pestaña 'BASE GENERAL' para extraer los datos."
+                        />
+                      </div>
+                   </div>
+                </div>
+
+                <div className="space-y-6">
+                   <div className="glass-card p-10 bg-slate-900 text-white overflow-hidden group border-none shadow-2xl">
+                      <div className="absolute top-0 right-0 w-full h-full bg-gradient-to-br from-amber-600/10 to-transparent pointer-events-none"></div>
+                      <div className="relative z-10">
+                         <h4 className="text-xl font-black mb-4 tracking-tight">Procesamiento Masivo</h4>
+                         <ul className="space-y-4 mb-10">
+                            {[
+                               { t: 'Mapeo Automático', d: 'Llena GENERAL (B|E|F|H|C>...)' },
+                               { t: 'Filtro de Pago', d: 'Solo registros con BP != 0, vacío o "-"' },
+                               { t: 'Lógica Comercial', d: 'Detecta "EFIGAS COMERCIALES" automáticamente.' },
+                               { t: 'Generación TXT', d: 'Exporta columna J resultante limpia.' }
+                            ].map((item, idx) => (
+                               <li key={idx} className="flex gap-4">
+                                  <div className="flex-shrink-0 w-6 h-6 bg-amber-500/20 rounded-full flex items-center justify-center">
+                                     <div className="w-1.5 h-1.5 bg-amber-500 rounded-full"></div>
+                                  </div>
+                                  <div>
+                                     <p className="font-bold text-sm text-white mb-0.5">{item.t}</p>
+                                     <p className="text-slate-400 text-xs">{item.d}</p>
+                                  </div>
+                               </li>
+                            ))}
+                         </ul>
+
+                         <button 
+                           onClick={async () => {
+                              if (!files.master.loaded) return alert('Debe cargar la Base General primero.');
+                              setProcessing(true);
+                              setProgress(20);
+                              setStatusMessage('Cargando plantilla de legalización...');
+                              
+                              try {
+                                 const engine = new LegalizationEngine();
+                                 const templateUrl = '/templates/Plantilla_Legalización_masíva.xls';
+                                 
+                                 const response = await fetch(templateUrl);
+                                 const templateBuffer = await response.arrayBuffer();
+                                 
+                                 setStatusMessage(`Procesando Tipo: ${selectedLegalizationTipo}...`);
+                                 setProgress(50);
+                                 
+                                 const result = await engine.processLegalization(
+                                    files.master.data || [],
+                                    selectedLegalizationTipo,
+                                    templateBuffer
+                                 );
+                                 
+                                 setProgress(90);
+                                 setStatusMessage('Preparando archivos finales...');
+                                 
+                                 const dateStr = new Date().toISOString().split('T')[0];
+                                 
+                                 // 1. Descargar Excel (.xls)
+                                 const blob = new Blob([result.excelBuffer], { type: 'application/vnd.ms-excel' });
+                                 const url = URL.createObjectURL(blob);
+                                 const link = document.createElement('a');
+                                 link.href = url;
+                                 link.download = `LEGALIZACION_${selectedLegalizationTipo}_${dateStr}.xls`;
+                                 document.body.appendChild(link);
+                                 link.click();
+                                 document.body.removeChild(link);
+
+                                 // 2. Descargar TXT
+                                 if (result.txtContent) {
+                                    const txtBlob = new Blob([result.txtContent], { type: 'text/plain;charset=utf-8' });
+                                    const txtUrl = URL.createObjectURL(txtBlob);
+                                    const txtLink = document.createElement('a');
+                                    txtLink.href = txtUrl;
+                                    txtLink.download = `COL_J_LEGALIZACION_${selectedLegalizationTipo}_${dateStr}.txt`;
+                                    document.body.appendChild(txtLink);
+                                    txtLink.click();
+                                    document.body.removeChild(txtLink);
+                                 }
+                                 
+                                 setProgress(100);
+                                 setStatusMessage('¡Legalización completada!');
+                                 setTimeout(() => {
+                                    setProcessing(false);
+                                    setProgress(0);
+                                 }, 2000);
+                              } catch (err: any) {
+                                 console.error(err);
+                                 alert('Error en legalización: ' + err.message);
+                                 setProcessing(false);
+                              }
+                           }}
+                           disabled={!files.master.loaded || processing}
+                           className="w-full py-5 bg-gradient-to-r from-amber-500 to-amber-600 rounded-2xl font-black text-lg hover:scale-[1.02] transition-all shadow-xl shadow-amber-500/20 disabled:opacity-50"
+                         >
+                            {processing ? 'Procesando...' : 'Generar Legalización Ahora'}
+                         </button>
+                      </div>
+                   </div>
+                </div>
              </div>
           </div>
         ) : (
