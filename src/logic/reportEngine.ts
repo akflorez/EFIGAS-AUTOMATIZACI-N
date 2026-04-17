@@ -7,7 +7,7 @@ export class ReportEngine {
    * @param convRaw Array of arrays from CONV sheet (using header: 1)
    * @param templateUrl URL or path to the template file
    */
-  public async generateReport(baseGeneralRaw: any[][], convRaw: any[][], templateUrl: string): Promise<any> {
+  public async generateReport(baseGeneralRaw: any[][], _convRaw: any[][], templateUrl: string): Promise<any> {
     const workbook = new ExcelJS.Workbook();
     
     // 1. Load Template
@@ -26,11 +26,7 @@ export class ReportEngine {
     const newSheet = workbook.addWorksheet(newSheetName);
     this.copyWorksheet(originalSheet, newSheet);
     
-    // 3. Prepare CONV Lookup Data (Rows 150 to 172)
-    // Excel rows 150-172 correspond to indices 149-171
-    const convLookup = convRaw.slice(149, 172).filter(row => row && row.length > 0);
-
-    // 4. Process New Sheet (A partir de fila 8)
+    // 3. Process New Sheet (A partir de fila 8)
     // baseGeneralRaw index 0 might be headers if not skipped. 
     // Usually user says "a partir de fila 8" in template, but base general is just data.
     baseGeneralRaw.forEach((baseRow, index) => {
@@ -66,30 +62,21 @@ export class ReportEngine {
       // BU(73) ← Base CO(92)
       targetRow.getCell(73).value = baseRow[92];
 
-      // --- CONV Cruce (BO=67, BQ=69) ---
-      // Identificamos dinámicamente la columna de motivo en la base general (buscando "MOTIVO DE NO PAGO" o similar)
-      const baseHeaders = baseGeneralRaw[0] || [];
-      const motivoColIndex = baseHeaders.findIndex(h => h?.toString().toUpperCase().includes('MOTIVO'));
-      const mejorPerfilColIndex = baseHeaders.findIndex(h => h?.toString().toUpperCase().includes('PERFIL'));
-
-      // Usamos el índice encontrado o caemos en uno probable (AR=43, BP=68, etc.)
-      const searchKeyMotivo = (motivoColIndex !== -1 ? baseRow[motivoColIndex] : baseRow[43])?.toString().toUpperCase().trim();
-      const searchKeyPerfil = (mejorPerfilColIndex !== -1 ? baseRow[mejorPerfilColIndex] : baseRow[68])?.toString().toUpperCase().trim();
-      
-      const matchMotivo = convLookup.find(cRow => 
-        cRow.some(cell => cell?.toString().toUpperCase().trim() === searchKeyMotivo)
-      );
-      
-      const matchPerfil = convLookup.find(cRow => 
-        cRow.some(cell => cell?.toString().toUpperCase().trim() === searchKeyPerfil)
-      );
-
-      if (matchMotivo) {
-        targetRow.getCell(67).value = matchMotivo[5]; // CONV F (index 5) -> BO
+      // --- BO (67) Extract code from BN (66) ---
+      const bnValue = baseRow[81]?.toString() || '';
+      const bnMatch = bnValue.match(/(\d+)/g);
+      if (bnMatch) {
+        targetRow.getCell(67).value = bnMatch[bnMatch.length - 1]; // Toma el último número (el código)
       }
-      
-      if (matchPerfil) {
-        targetRow.getCell(69).value = matchPerfil[3]; // CONV D (index 3) -> BQ
+
+      // --- BQ (69) Extraer código de BP ---
+      // Primero nos aseguramos de que BP (68) tenga solo el número si viene de Base CC (80)
+      const bpBaseValue = baseRow[80]?.toString() || '';
+      const bpMatch = bpBaseValue.match(/(\d+)/g);
+      if (bpMatch) {
+        const code = bpMatch[bpMatch.length - 1];
+        targetRow.getCell(68).value = code; // BP solo con número
+        targetRow.getCell(69).value = code; // BQ solo con número
       }
 
       targetRow.commit();
