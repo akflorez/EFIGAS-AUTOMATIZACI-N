@@ -8,7 +8,7 @@ export interface LegalizationResult {
 export class LegalizationEngine {
   async processLegalization(
     baseData: any[][], 
-    tipoSeleccionado: string, 
+    tipoSeleccionado: string[], 
     templateArrayBuffer: ArrayBuffer
   ): Promise<LegalizationResult> {
     // 1. Read Template (.xls)
@@ -50,11 +50,9 @@ export class LegalizationEngine {
       // Filter: BP != 0, empty, "-"
       const isValidBP = pago2 !== '0' && pago2 !== '' && pago2 !== '-';
       
-      // Filter: Tipo seleccionado (1367, 1368, 1369 or TODOS)
+      // Filter: Tipos seleccionados (e.g. ['1367', '1368'])
       // Check column BO (CRUCE)
-      const matchesTipo = tipoSeleccionado === 'TODOS' 
-        ? ['1367', '1368', '1369'].includes(cruce)
-        : cruce === tipoSeleccionado;
+      const matchesTipo = tipoSeleccionado.includes(cruce);
 
       // Filter: Tipo (Base) != 0
       const isNotZeroTipo = cruce !== '0';

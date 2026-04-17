@@ -10,7 +10,7 @@ import {
   Settings, Database, ClipboardList, PackageCheck,
   LogOut, ChevronRight, BarChart3,
   Layers, User as UserIcon, Calendar, AlertTriangle,
-  Gavel
+  CircleDollarSign
 } from 'lucide-react';
 
 interface FileStatus {
@@ -51,7 +51,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [resultados, setResultados] = useState<RegistroNormalizado[]>([]);
   const [showOnlyInvalid, setShowOnlyInvalid] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [selectedLegalizationTipo, setSelectedLegalizationTipo] = useState<string>('1367');
+  const [selectedLegalizationTipo, setSelectedLegalizationTipo] = useState<string[]>(['1367']);
 
   const handleFileUpload = async (e: ChangeEvent<HTMLInputElement>, type: 'movilidad' | 'terreno' | 'master' | 'maestro') => {
     const file = e.target.files?.[0];
@@ -358,7 +358,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               <NavItem 
                 active={activeTab === 'legalizacion'} 
                 onClick={() => setActiveTab('legalizacion')} 
-                icon={<Gavel size={20} className={activeTab === 'legalizacion' ? "text-emerald-400" : "text-white/40"} />} 
+                icon={<CircleDollarSign size={20} className={activeTab === 'legalizacion' ? "text-emerald-400" : "text-white/40"} />} 
                 label="Legalizaciones" 
                 collapsed={isSidebarCollapsed}
               />
@@ -758,23 +758,44 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                             <h3 className="text-2xl font-black text-slate-800 tracking-tight">Módulo de Legalización</h3>
                             <p className="text-slate-400 text-sm font-medium">Filtro obligatorio por "Tipo" de base.</p>
                          </div>
-                         <div className="w-14 h-14 bg-amber-50 rounded-2xl flex items-center justify-center text-amber-500">
-                            <Gavel size={28} />
+                         <div className="w-14 h-14 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-500">
+                            <CircleDollarSign size={28} />
                          </div>
                       </div>
 
                       <div className="space-y-4">
-                         <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">Seleccionar Tipo a Procesar</label>
+                         <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">Seleccionar Tipo(s) a Procesar</label>
                          <div className="grid grid-cols-4 gap-2">
-                            {['1367', '1368', '1369', 'TODOS'].map(tipo => (
-                               <button 
-                                 key={tipo}
-                                 onClick={() => setSelectedLegalizationTipo(tipo)}
-                                 className={`py-3 px-4 rounded-xl text-xs font-bold transition-all border ${selectedLegalizationTipo === tipo ? 'bg-amber-500 text-white border-amber-600 shadow-lg shadow-amber-500/20' : 'bg-slate-50 text-slate-400 border-slate-100 hover:bg-slate-100'}`}
-                               >
-                                  {tipo}
-                               </button>
-                            ))}
+                            {['1367', '1368', '1369'].map(tipo => {
+                               const isSelected = selectedLegalizationTipo.includes(tipo);
+                               return (
+                                 <button 
+                                   key={tipo}
+                                   onClick={() => {
+                                      if (isSelected) {
+                                        setSelectedLegalizationTipo(prev => prev.filter(t => t !== tipo));
+                                      } else {
+                                        setSelectedLegalizationTipo(prev => [...prev, tipo]);
+                                      }
+                                   }}
+                                   className={`py-3 px-4 rounded-xl text-xs font-bold transition-all border ${isSelected ? 'bg-emerald-500 text-white border-emerald-600 shadow-lg shadow-emerald-500/20' : 'bg-slate-50 text-slate-400 border-slate-100 hover:bg-slate-100'}`}
+                                 >
+                                    {tipo}
+                                 </button>
+                               );
+                            })}
+                            <button 
+                              onClick={() => {
+                                 if (selectedLegalizationTipo.length === 3) {
+                                   setSelectedLegalizationTipo([]);
+                                 } else {
+                                   setSelectedLegalizationTipo(['1367', '1368', '1369']);
+                                 }
+                              }}
+                              className={`py-3 px-4 rounded-xl text-xs font-bold transition-all border ${selectedLegalizationTipo.length === 3 ? 'bg-emerald-500 text-white border-emerald-600' : 'bg-slate-50 text-slate-400 border-slate-100'}`}
+                            >
+                               TODOS
+                            </button>
                          </div>
                       </div>
 
@@ -843,13 +864,14 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                                  setStatusMessage('Preparando archivos finales...');
                                  
                                  const dateStr = new Date().toISOString().split('T')[0];
+                                 const labelSufix = selectedLegalizationTipo.length === 3 ? 'TODOS' : selectedLegalizationTipo.join('_');
                                  
                                  // 1. Descargar Excel (.xls)
                                  const blob = new Blob([result.excelBuffer], { type: 'application/vnd.ms-excel' });
                                  const url = URL.createObjectURL(blob);
                                  const link = document.createElement('a');
                                  link.href = url;
-                                 link.download = `LEGALIZACION_${selectedLegalizationTipo}_${dateStr}.xls`;
+                                 link.download = `LEGALIZACION_${labelSufix}_${dateStr}.xls`;
                                  document.body.appendChild(link);
                                  link.click();
                                  document.body.removeChild(link);
@@ -860,7 +882,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                                     const txtUrl = URL.createObjectURL(txtBlob);
                                     const txtLink = document.createElement('a');
                                     txtLink.href = txtUrl;
-                                    txtLink.download = `COL_J_LEGALIZACION_${selectedLegalizationTipo}_${dateStr}.txt`;
+                                    txtLink.download = `COL_J_LEGALIZACION_${labelSufix}_${dateStr}.txt`;
                                     document.body.appendChild(txtLink);
                                     txtLink.click();
                                     document.body.removeChild(txtLink);
