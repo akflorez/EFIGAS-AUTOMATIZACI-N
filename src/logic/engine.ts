@@ -302,7 +302,7 @@ export class ProcessingEngine {
       fuente_principal: 'movilidad',
       identificacion_valida: !!base,
       perfil_maestro: perfil,
-      cedula_maestra: (this.getFieldValue(base, ["CEDULA"]) || '').toString(),
+      cedula_maestra: (this.getFieldValue(base, ["CEDULA", "CEDULA "]) || (base ? Object.values(base)[14] : '') || '').toString(),
       telefono_maestro: (this.getFieldValue(row, ["celular de la persona que atendió", "Celular de persona que atendió", "celular persona que atendio", "Celular de la persona que atendio", "celular personal", "celular_personal", "numero marca", "numero de celular", "celular", "telefono", "numero contacto", "telefono nuevo para el cvs"]) || '').toString(),
       comentarios_concatenados: comments
     };
@@ -344,7 +344,7 @@ export class ProcessingEngine {
       producto: product,
       cliente: (this.getFieldValue(base, ["NOMBRE"]) || '').toString(),
       direccion: (this.getFieldValue(base, ["DIRECCION"]) || '').toString(),
-      cedula_maestra: (this.getFieldValue(base, ["CEDULA"]) || '').toString(),
+      cedula_maestra: (this.getFieldValue(base, ["CEDULA", "CEDULA "]) || (base ? Object.values(base)[14] : '') || '').toString(),
       telefono_maestro: (this.getFieldValue(row, ["telefono nuevo para el cvs", "telefono nuevo", "nuevo_telefono", "telefono_nuevo", "nuevo telefono", "celular de la persona que atendió", "Celular de persona que atendió", "celular nuevo", "numero marcar", "telefono adicional", "celular", "telefono", "numero adicional"]) || '').toString(),
       causal: observacion.toUpperCase(), // Gestión = Observación pura
       codigo_causal: mappedMotCode, // CORRECCIÓN: Usar código de no pago
