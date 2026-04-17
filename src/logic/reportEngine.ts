@@ -38,9 +38,15 @@ export class ReportEngine {
 
       // --- Main Mapping: Base B:BI (indices 1-60) -> Template A:BH (indices 1-60) ---
       for (let col = 1; col <= 60; col++) {
-        const val = baseRow[col]; // Base B is index 1
+        // La columna O de la base es índice 14. La columna N de la plantilla es índice 14.
+        // Forzamos que si es la columna 14 (N), traiga siempre la O (14).
+        const val = baseRow[col];
         if (val !== undefined) targetRow.getCell(col).value = val;
       }
+
+      // --- Especial: Asegurar Cédula desde Columna O (índice 14) ---
+      const cedulaVal = baseRow[14];
+      if (cedulaVal) targetRow.getCell(14).value = cedulaVal;
 
       // --- Special Mappings ---
       // BK(63) ← Base BM(64)
@@ -62,20 +68,19 @@ export class ReportEngine {
       // BU(73) ← Base CO(92)
       targetRow.getCell(73).value = baseRow[92];
 
-      // --- BO (67) Extract code from BN (66) ---
+      // --- BO (67) Extraer código de BN (66). Evitar Cédulas (más de 5 dígitos) ---
       const bnValue = baseRow[81]?.toString() || '';
-      const bnMatch = bnValue.match(/(\d+)/g);
+      const bnMatch = bnValue.match(/\b\d{1,5}\b/g); // Busca números de 1 a 5 dígitos únicamente
       if (bnMatch) {
-        targetRow.getCell(67).value = bnMatch[bnMatch.length - 1]; // Toma el último número (el código)
+        targetRow.getCell(67).value = bnMatch[bnMatch.length - 1];
       }
 
       // --- BQ (69) Extraer código de BP ---
-      // Primero nos aseguramos de que BP (68) tenga solo el número si viene de Base CC (80)
       const bpBaseValue = baseRow[80]?.toString() || '';
-      const bpMatch = bpBaseValue.match(/(\d+)/g);
+      const bpMatch = bpBaseValue.match(/\b\d{1,5}\b/g); 
       if (bpMatch) {
         const code = bpMatch[bpMatch.length - 1];
-        targetRow.getCell(68).value = code; // BP solo con número
+        targetRow.getCell(68).value = code; // BP solo con número como pidieron
         targetRow.getCell(69).value = code; // BQ solo con número
       }
 
@@ -84,8 +89,6 @@ export class ReportEngine {
 
     // 5. Update COMENTARIOS MASIVO (Preserving Formulas)
     if (commentsSheet) {
-      // Data starts usually at row 2
-      // Source: New Tab G(7), BO(67), BR(70)
       for (let i = 0; i < baseGeneralRaw.length - 1; i++) {
         const sourceRow = newSheet.getRow(8 + i);
         const targetRow = commentsSheet.getRow(3 + i);
@@ -97,7 +100,6 @@ export class ReportEngine {
         // C (3): observacion ← BR (70)
         targetRow.getCell(3).value = sourceRow.getCell(70).value;
 
-        // D (4) has a formula. We DO NOT touch it.
         targetRow.commit();
       }
     }
