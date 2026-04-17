@@ -76,12 +76,13 @@ export class ReportEngine {
       }
 
       // --- BQ (69) Extraer código de BP ---
+      // BP (68) mantiene el texto completo de Base CC (80)
       const bpBaseValue = baseRow[80]?.toString() || '';
+      targetRow.getCell(68).value = bpBaseValue; 
+      
       const bpMatch = bpBaseValue.match(/\b\d{1,5}\b/g); 
       if (bpMatch) {
-        const code = bpMatch[bpMatch.length - 1];
-        targetRow.getCell(68).value = code; // BP solo con número como pidieron
-        targetRow.getCell(69).value = code; // BQ solo con número
+        targetRow.getCell(69).value = bpMatch[bpMatch.length - 1]; // BQ solo con número
       }
 
       targetRow.commit();
