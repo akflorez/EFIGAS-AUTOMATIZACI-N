@@ -860,7 +860,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                                  setProgress(50);
                                  
                                  const result = await engine.processLegalization(
-                                    files.master.data || [],
+                                    files.master.secondaryData || [],
                                     selectedLegalizationTipo,
                                     templateBuffer
                                  );
@@ -881,17 +881,15 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                                  link.click();
                                  document.body.removeChild(link);
 
-                                 // 2. Descargar TXT
-                                 if (result.txtContent) {
-                                    const txtBlob = new Blob([result.txtContent], { type: 'text/plain;charset=utf-8' });
-                                    const txtUrl = URL.createObjectURL(txtBlob);
-                                    const txtLink = document.createElement('a');
-                                    txtLink.href = txtUrl;
-                                    txtLink.download = `COL_J_LEGALIZACION_${labelSufix}_${dateStr}.txt`;
-                                    document.body.appendChild(txtLink);
-                                    txtLink.click();
-                                    document.body.removeChild(txtLink);
-                                 }
+                                 // 2. Descargar TXT (siempre, incluso si hay pocos registros)
+                                 const txtBlob = new Blob([result.txtContent], { type: 'text/plain;charset=utf-8' });
+                                 const txtUrl = URL.createObjectURL(txtBlob);
+                                 const txtLink = document.createElement('a');
+                                 txtLink.href = txtUrl;
+                                 txtLink.download = `COL_J_LEGALIZACION_${labelSufix}_${dateStr}.txt`;
+                                 document.body.appendChild(txtLink);
+                                 txtLink.click();
+                                 document.body.removeChild(txtLink);
                                  
                                  setProgress(100);
                                  setStatusMessage('¡Legalización completada!');
