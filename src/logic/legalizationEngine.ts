@@ -24,18 +24,31 @@ export class LegalizationEngine {
     // 2. Dynamic Column Discovery
     const headers = baseData[0] || [];
     const findIdx = (names: string[]) => {
+      // 1. Try exact match first
+      const exact = headers.findIndex((h: any) => 
+        h && names.some(name => h.toString().trim().toUpperCase() === name.toUpperCase())
+      );
+      if (exact !== -1) return exact;
+
+      // 2. Try partial match if no exact match found
       return headers.findIndex((h: any) => 
-        h && names.some(name => h.toString().toUpperCase().includes(name.toUpperCase()))
+        h && names.some(name => {
+          const val = h.toString().trim().toUpperCase();
+          const target = name.toUpperCase();
+          // Exclude false positives
+          if (target === 'TIPO' && val.includes('PRODUCTO')) return false;
+          return val.includes(target);
+        })
       );
     };
 
     const colIdx = {
       PORTAFOLIO: findIdx(['PORTAFOLIO']),
       CARTERA: findIdx(['CARTERA']),
-      OT: findIdx(['OT', 'ORDEN']),
-      PAGO2: findIdx(['PAGO2', 'PAGO 2']),
-      CRUCE: findIdx(['TIPO', 'CRUCE']), // Prioritize TIPO if exists
-      LEGALIZACION: findIdx(['LEGALIZACION', 'FRASE']),
+      OT: findIdx(['OT', 'ORDEN', 'NÚMERO DE ORDEN']),
+      PAGO2: findIdx(['PAGO2', 'PAGO 2', 'CRUCE ARCHIVO DE PAGOS']),
+      CRUCE: findIdx(['TIPO', 'CRUCE ARCHIVO DE PAGOS']), 
+      LEGALIZACION: findIdx(['LEGALIZACION', 'FRASE', 'LEGALIZACION DE PAGOS CIERRRE']),
       ACTIVIDAD: findIdx(['ACTIVIDAD']),
     };
 
