@@ -11,8 +11,9 @@ export class LegalizationEngine {
     tipoSeleccionado: string[], 
     templateArrayBuffer: ArrayBuffer
   ): Promise<LegalizationResult> {
-    // 1. Read Template (.xls)
-    const templateWorkbook = XLSX.read(templateArrayBuffer, { cellFormula: true, cellStyles: true });
+    // 1. Read Template
+    // Note: Community version of sheetjs handles .xlsx much better than .xls for writing.
+    const templateWorkbook = XLSX.read(templateArrayBuffer, { cellFormula: true });
     const sheetName = 'GENERAL';
     const sheet = templateWorkbook.Sheets[sheetName];
 
@@ -20,50 +21,44 @@ export class LegalizationEngine {
       throw new Error(`No se encontró la pestaña "${sheetName}" en la plantilla.`);
     }
 
-    // 2. Identify Headers in Base Data
-    
-    const getIndex = (letter: string) => {
-      let val = 0;
-      for (let i = 0; i < letter.length; i++) {
-        val = val * 26 + (letter.charCodeAt(i) - 64);
-      }
-      return val - 1;
+    // 2. Dynamic Column Discovery
+    const headers = baseData[0] || [];
+    const findIdx = (names: string[]) => {
+      return headers.findIndex((h: any) => 
+        h && names.some(name => h.toString().toUpperCase().includes(name.toUpperCase()))
+      );
     };
 
     const colIdx = {
-      PORTAFOLIO: getIndex('A'),
-      CARTERA: getIndex('B'),
-      OT: getIndex('H'),
-      PAGO2: getIndex('BP'),
-      CRUCE: getIndex('BO'),
-      TIPO: getIndex('BT'),
-      LEGALIZACION: getIndex('CA'),
-      ACTIVIDAD: getIndex('DY'),
-      CATEGORIA: getIndex('AC')
+      PORTAFOLIO: findIdx(['PORTAFOLIO']),
+      CARTERA: findIdx(['CARTERA']),
+      OT: findIdx(['OT', 'ORDEN']),
+      PAGO2: findIdx(['PAGO2', 'PAGO 2']),
+      CRUCE: findIdx(['TIPO', 'CRUCE']), // Prioritize TIPO if exists
+      LEGALIZACION: findIdx(['LEGALIZACION', 'FRASE']),
+      ACTIVIDAD: findIdx(['ACTIVIDAD']),
     };
 
-    // 3. Filter Records
+    // Fallback to old indexes if dynamic discovery fails
+    if (colIdx.PAGO2 === -1) colIdx.PAGO2 = 67; // BP
+    if (colIdx.CRUCE === -1) colIdx.CRUCE = 71; // BT
+    if (colIdx.OT === -1) colIdx.OT = 7; // H (OT is 7 in 0-indexed)
+    if (colIdx.LEGALIZACION === -1) colIdx.LEGALIZACION = 78; // CA
+    if (colIdx.ACTIVIDAD === -1) colIdx.ACTIVIDAD = 128; // DY
+    if (colIdx.CARTERA === -1) colIdx.CARTERA = 1; // B
+    if (colIdx.PORTAFOLIO === -1) colIdx.PORTAFOLIO = 0; // A
+
+    // 3. Filter Records (Strict)
     const filteredRecords = baseData.slice(1).filter(row => {
-      const pago2 = row[colIdx.PAGO2]?.toString().trim();
-      const cruce = row[colIdx.CRUCE]?.toString().trim();
+      const pago2Value = row[colIdx.PAGO2]?.toString().trim();
+      const typeValue = row[colIdx.CRUCE]?.toString().trim();
       
-      // Filter: BP != 0, empty, "-"
-      const isValidBP = pago2 !== '0' && pago2 !== '' && pago2 !== '-';
-      
-      // Filter: Tipos seleccionados (e.g. ['1367', '1368'])
-      // Check column BO (CRUCE)
-      const matchesTipo = tipoSeleccionado.includes(cruce);
+      const isValidPayment = pago2Value !== '0' && pago2Value !== '' && pago2Value !== '-' && pago2Value !== undefined;
+      const matchesSelected = tipoSeleccionado.includes(typeValue);
+      const isNotEmptyType = typeValue !== '0' && typeValue !== '';
 
-      // Filter: Tipo (Base) != 0
-      const isNotZeroTipo = cruce !== '0';
-
-      return isValidBP && matchesTipo && isNotZeroTipo;
+      return isValidPayment && matchesSelected && isNotEmptyType;
     });
-
-    // 4. Mapping to GENERAL sheet (starting Row 2 -> Index 1)
-    // We'll clear the sheet from row 1 (index 1) onwards or just overwrite
-    
-    let txtLines: string[] = [];
 
     const tipoToCausal: Record<string, string> = {
       '1367': '9813',
@@ -71,61 +66,48 @@ export class LegalizationEngine {
       '1369': '9816'
     };
 
-    filteredRecords.forEach((row, index) => {
+    // 4. Prepare Data for Insertion
+    const dataToInsert = filteredRecords.map(row => {
       const baseA = row[colIdx.PORTAFOLIO]?.toString().trim();
-      const baseCruce = row[colIdx.CRUCE]?.toString().trim();
+      const currentType = row[colIdx.CRUCE]?.toString().trim();
       
-      // Mapping values
-      const valA = row[colIdx.CARTERA];
-      const valB = row[colIdx.OT];
-      const valC = row[colIdx.ACTIVIDAD];
+      const valA = row[colIdx.CARTERA] || '';
+      const valB = row[colIdx.OT] || '';
+      const valC = row[colIdx.ACTIVIDAD] || '';
       const valD = 's';
-      const valE = tipoToCausal[baseCruce] || '';
+      const valE = tipoToCausal[currentType] || '';
       const valF = baseA === 'EFIGAS COMERCIALES' ? '13697' : '13681';
-      const valG = row[colIdx.TIPO];
-      const valH = '13861'; // Based on example persona
-      const valI = row[colIdx.LEGALIZACION];
+      const valG = currentType; 
+      const valH = '13861'; 
+      const valI = row[colIdx.LEGALIZACION] || '';
 
-      // Update sheet cells
-      const rowIndex = 2 + index; // Starting row 2
-      
-      // Set values in sheet
-      const setCell = (col: string, val: any) => {
-        sheet[XLSX.utils.encode_cell({ c: getIndex(col), r: rowIndex - 1 })] = { v: val, t: typeof val === 'number' ? 'n' : 's' };
-      };
-
-      setCell('A', valA);
-      setCell('B', valB);
-      setCell('C', valC);
-      setCell('D', valD);
-      setCell('E', valE);
-      setCell('F', valF);
-      setCell('G', valG);
-      setCell('H', valH);
-      setCell('I', valI);
-
-      // 5. Calculate TXT (Formula Col J): B|E|F|H|C>IF(D="s",1,0);;;;|||G;I
-      // Formula: B2&"|"&E2&"|"&F2&"|"&H2&"|"&C2&">"&IF(D2="S",1,0)&";;;;|||"&G2&";"&I2
-      // We use lowercase 's' as requested, Excel comparison is usually case-insensitive.
+      // Formula logic for TXT/Col J
       const dValue = valD.toLowerCase() === 's' ? '1' : '0';
       const lineJ = `${valB}|${valE}|${valF}|${valH}|${valC}>${dValue};;;;|||${valG};${valI}`;
-      txtLines.push(lineJ);
 
-      // Update Column J in Sheet just in case they download the Excel
-      setCell('J', lineJ);
+      return [valA, valB, valC, valD, valE, valF, valG, valH, valI, lineJ];
     });
 
-    // Update range
-    const maxRow = 1 + filteredRecords.length;
-    sheet['!ref'] = XLSX.utils.encode_range({ s: { c: 0, r: 0 }, e: { c: 9, r: Math.max(1, maxRow) } });
+    // 5. Total Sheet Replacement (Fresh Sheet)
+    const originalSheet = templateWorkbook.Sheets[sheetName];
+    const templateHeaders = XLSX.utils.sheet_to_json(originalSheet, { header: 1 })[0] as any[];
+    const newSheet = XLSX.utils.aoa_to_sheet([templateHeaders, ...dataToInsert]);
 
-    // 6. Generate Buffers
-    const excelOutput = XLSX.write(templateWorkbook, { type: 'buffer', bookType: 'xls' });
-    const txtOutput = txtLines.join('\n');
+    // Copy basic style properties
+    if (originalSheet['!cols']) newSheet['!cols'] = originalSheet['!cols'];
+    if (originalSheet['!merges']) newSheet['!merges'] = originalSheet['!merges'];
+    
+    templateWorkbook.Sheets[sheetName] = newSheet;
+
+    // 6. Generate TXT Content (from Col J)
+    const txtContent = dataToInsert.map(row => row[9]).join('\n');
+
+    // 7. Export as XLSX for stability
+    const excelOutput = XLSX.write(templateWorkbook, { type: 'buffer', bookType: 'xlsx' });
 
     return {
       excelBuffer: excelOutput,
-      txtContent: txtOutput
+      txtContent: txtContent
     };
   }
 }

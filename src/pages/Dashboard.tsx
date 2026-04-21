@@ -871,12 +871,12 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                                  const dateStr = new Date().toISOString().split('T')[0];
                                  const labelSufix = selectedLegalizationTipo.length === 3 ? 'TODOS' : selectedLegalizationTipo.join('_');
                                  
-                                 // 1. Descargar Excel (.xls)
-                                 const blob = new Blob([result.excelBuffer], { type: 'application/vnd.ms-excel' });
+                                 // 1. Descargar Excel (.xlsx)
+                                 const blob = new Blob([result.excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
                                  const url = URL.createObjectURL(blob);
                                  const link = document.createElement('a');
                                  link.href = url;
-                                 link.download = `LEGALIZACION_${labelSufix}_${dateStr}.xls`;
+                                 link.download = `LEGALIZACION_${labelSufix}_${dateStr}.xlsx`;
                                  document.body.appendChild(link);
                                  link.click();
                                  document.body.removeChild(link);
