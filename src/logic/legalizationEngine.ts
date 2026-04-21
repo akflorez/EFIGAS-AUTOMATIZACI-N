@@ -46,11 +46,15 @@ export class LegalizationEngine {
       PORTAFOLIO: findIdx(['PORTAFOLIO']),
       CARTERA: findIdx(['CARTERA']),
       OT: findIdx(['OT', 'ORDEN', 'NÚMERO DE ORDEN']),
-      PAGO2: findIdx(['PAGO2', 'PAGO 2', 'CRUCE ARCHIVO DE PAGOS']),
-      CRUCE: findIdx(['TIPO', 'CRUCE ARCHIVO DE PAGOS']), 
+      PAGO2: findIdx(['PAGO2', 'PAGO 2']), // Try PAGO2 first
+      CRUCE: findIdx(['TIPO']), // Try TIPO specifically first
       LEGALIZACION: findIdx(['LEGALIZACION', 'FRASE', 'LEGALIZACION DE PAGOS CIERRRE']),
       ACTIVIDAD: findIdx(['ACTIVIDAD']),
     };
+
+    // Second pass for fallbacks if primary ones not found
+    if (colIdx.CRUCE === -1) colIdx.CRUCE = findIdx(['CRUCE ARCHIVO DE PAGOS']);
+    if (colIdx.PAGO2 === -1) colIdx.PAGO2 = findIdx(['CRUCE ARCHIVO DE PAGOS']);
 
     // Fallback to old indexes if dynamic discovery fails
     if (colIdx.PAGO2 === -1) colIdx.PAGO2 = 67; // BP
@@ -113,7 +117,8 @@ export class LegalizationEngine {
     templateWorkbook.Sheets[sheetName] = newSheet;
 
     // 6. Generate TXT Content (from Col J)
-    const txtContent = dataToInsert.map(row => row[9]).join('\n');
+    const debugLine = `DEBUG: PAGO2=${headers[colIdx.PAGO2]}, TIPO=${headers[colIdx.CRUCE]}, OT=${headers[colIdx.OT]}`;
+    const txtContent = [debugLine, ...dataToInsert.map(row => row[9])].join('\n');
 
     // 7. Export as XLSX for stability
     const excelOutput = XLSX.write(templateWorkbook, { type: 'buffer', bookType: 'xlsx' });
