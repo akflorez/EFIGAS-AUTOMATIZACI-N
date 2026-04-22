@@ -92,7 +92,6 @@ export class LegalizationEngine {
 
     // 4. Prepare Data for Insertion
     const dataToInsert = filteredRecords.map(row => {
-      const baseA = row[colIdx.PORTAFOLIO]?.toString().trim();
       const currentType = row[colIdx.CRUCE]?.toString().trim();
       
       const valA = row[colIdx.CARTERA] || '';
@@ -100,8 +99,10 @@ export class LegalizationEngine {
       const valC = row[colIdx.ACTIVIDAD] || '';
       const valD = 's';
       const valE = tipoToCausal[currentType] || '';
-      // F: Persona logic: EFIGAS COMERCIALES -> 13697, others -> 13861
-      const valF = baseA === 'EFIGAS COMERCIALES' ? '13697' : '13861';
+      // F: Persona logic: EFIGAS COMERCIALES -> 13697, others -> 13681
+      // checking the CARTERA field specifically as requested
+      const fieldToCheck = row[colIdx.CARTERA]?.toString().trim();
+      const valF = fieldToCheck === 'EFIGAS COMERCIALES' ? '13697' : '13681';
       const valG = currentType; 
       const valH = defaultDatosAdicionales; 
       const valI = row[colIdx.LEGALIZACION] || '';
