@@ -115,9 +115,19 @@ export class LegalizationEngine {
     });
 
     // 5. Clean and Update same sheet to preserve formats/metadata
-    // Avoid re-creating with aoa_to_sheet to keep column widths and headers
     const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1:J100');
-    // Clear everything from row 2 downwards
+
+    // 5.1 Remove comments from headers (Row 1, R=0)
+    for (let C = 0; C <= 9; ++C) {
+      const cellAddr = XLSX.utils.encode_cell({ r: 0, c: C });
+      if (sheet[cellAddr]) {
+        delete sheet[cellAddr].c; // Remove comments/notes
+        delete sheet[cellAddr].t; // Ensure it is treated correctly if it was part of a comment object
+        // Restore common properties if accidentally cleared, though delete .c should be enough
+      }
+    }
+
+    // 5.2 Clear everything from row 2 downwards
     for (let R = 1; R <= range.e.r; ++R) {
         for (let C = 0; C <= 9; ++C) { // Up to Column J
             const cellAddr = XLSX.utils.encode_cell({r: R, c: C});
