@@ -65,6 +65,13 @@ export class LegalizationEngine {
     if (colIdx.CARTERA === -1) colIdx.CARTERA = 1; // B
     if (colIdx.PORTAFOLIO === -1) colIdx.PORTAFOLIO = 0; // A
 
+    // 2.5 Extract "Datos adicionales" from template if available (H2)
+    // Column H corresponds to index 7
+    let defaultDatosAdicionales = '13861';
+    if (sheet && sheet['H2']) {
+      defaultDatosAdicionales = sheet['H2'].v?.toString() || defaultDatosAdicionales;
+    }
+
     // 3. Filter Records (Strict)
     const filteredRecords = baseData.slice(1).filter(row => {
       const pago2Value = row[colIdx.PAGO2]?.toString().trim();
@@ -93,9 +100,10 @@ export class LegalizationEngine {
       const valC = row[colIdx.ACTIVIDAD] || '';
       const valD = 's';
       const valE = tipoToCausal[currentType] || '';
-      const valF = baseA === 'EFIGAS COMERCIALES' ? '13697' : '13681';
+      // F: Persona logic: EFIGAS COMERCIALES -> 13697, others -> 13861
+      const valF = baseA === 'EFIGAS COMERCIALES' ? '13697' : '13861';
       const valG = currentType; 
-      const valH = '13861'; 
+      const valH = defaultDatosAdicionales; 
       const valI = row[colIdx.LEGALIZACION] || '';
 
       // Formula logic for TXT/Col J
@@ -105,20 +113,24 @@ export class LegalizationEngine {
       return [valA, valB, valC, valD, valE, valF, valG, valH, valI, lineJ];
     });
 
-    // 5. Total Sheet Replacement (Fresh Sheet)
-    const originalSheet = templateWorkbook.Sheets[sheetName];
-    const templateHeaders = XLSX.utils.sheet_to_json(originalSheet, { header: 1 })[0] as any[];
-    const newSheet = XLSX.utils.aoa_to_sheet([templateHeaders, ...dataToInsert]);
-
-    // Copy basic style properties
-    if (originalSheet['!cols']) newSheet['!cols'] = originalSheet['!cols'];
-    if (originalSheet['!merges']) newSheet['!merges'] = originalSheet['!merges'];
+    // 5. Clean and Update same sheet to preserve formats/metadata
+    // Avoid re-creating with aoa_to_sheet to keep column widths and headers
+    const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1:J100');
+    // Clear everything from row 2 downwards
+    for (let R = 1; R <= range.e.r; ++R) {
+        for (let C = 0; C <= 9; ++C) { // Up to Column J
+            const cellAddr = XLSX.utils.encode_cell({r: R, c: C});
+            delete sheet[cellAddr];
+        }
+    }
     
-    templateWorkbook.Sheets[sheetName] = newSheet;
+    // Add new data starting at A2 (1, 0)
+    if (dataToInsert.length > 0) {
+        XLSX.utils.sheet_add_aoa(sheet, dataToInsert, { origin: 'A2' });
+    }
 
     // 6. Generate TXT Content (from Col J)
-    const debugLine = `DEBUG: PAGO2=${headers[colIdx.PAGO2]}, TIPO=${headers[colIdx.CRUCE]}, OT=${headers[colIdx.OT]}`;
-    const txtContent = [debugLine, ...dataToInsert.map(row => row[9])].join('\n');
+    const txtContent = dataToInsert.map(row => row[9]).join('\n');
 
     // 7. Export as XLSX for stability
     const excelOutput = XLSX.write(templateWorkbook, { type: 'buffer', bookType: 'xlsx' });
