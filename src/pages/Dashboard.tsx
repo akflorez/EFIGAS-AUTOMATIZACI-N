@@ -10,7 +10,7 @@ import {
   Settings, Database, ClipboardList, PackageCheck,
   LogOut, ChevronRight, BarChart3,
   Layers, User as UserIcon, Calendar, AlertTriangle,
-  CircleDollarSign
+  CircleDollarSign, Map
 } from 'lucide-react';
 
 interface FileStatus {
@@ -338,16 +338,15 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         </div>
 
         <nav className="flex-1 space-y-2">
-          <NavItem 
-            active={activeTab === 'procesar'} 
-            onClick={() => setActiveTab('procesar')} 
-            icon={<Database size={20} />} 
-            label="Visitas Terreno" 
-            collapsed={isSidebarCollapsed}
-          />
-          
           <div className="pt-4 mt-4 border-t border-white/5">
              <p className={`px-4 text-[10px] font-black text-white/30 uppercase tracking-widest mb-4 ${isSidebarCollapsed ? 'hidden' : 'block'}`}>Herramientas</p>
+              <NavItem 
+                active={activeTab === 'procesar'} 
+                onClick={() => setActiveTab('procesar')} 
+                icon={<Map size={20} className={activeTab === 'procesar' ? "text-emerald-400" : "text-white/40"} />} 
+                label="Visitas Terreno" 
+                collapsed={isSidebarCollapsed}
+              />
               <NavItem 
                 active={activeTab === 'reporte'} 
                 onClick={() => setActiveTab('reporte')} 
