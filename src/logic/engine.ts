@@ -144,8 +144,8 @@ export class ProcessingEngine {
   public consolidateMovilidadComments(row: any): string {
     const commentFields = Object.keys(row).filter(k => {
       const sk = k.toLowerCase();
-      // Solo campos que digan "comentario" y NUNCA "observacion"
-      return sk.includes('comentario') && !sk.includes('observacion') && !sk.includes('observación');
+      return (sk.includes('comentario') || sk.includes('gestion') || sk.includes('detalle') || sk.includes('observaci')) 
+             && !sk.includes('fecha') && !sk.includes('hora');
     });
     const comments: string[] = [];
     for (const field of commentFields) {
@@ -277,7 +277,7 @@ export class ProcessingEngine {
     const product = (this.getFieldValue(row, ["Producto", "CUENTA"]) || '').toString().trim();
     const base = this.baseGeneral.get(product);
     const comments = this.consolidateMovilidadComments(row);
-    let causalRaw = (this.getFieldValue(row, ["Causal"]) || '').toString().trim();
+    let causalRaw = (this.getFieldValue(row, ["Causal", "Causales", "Motivo", "Motivos", "Causal no pago", "Motivo no pago", "Comentario", "Gestión", "Gestion", "Observacion", "Observación"]) || '').toString().trim();
     // Corrección específica: 1474 -> 1473
     causalRaw = causalRaw.replace(/No Contesta - Numero Activo 1474/g, 'No Contesta - Numero Activo 1473');
     
@@ -331,7 +331,7 @@ export class ProcessingEngine {
   private homologateTerreno(row: any): RegistroNormalizado {
     const product = (this.getFieldValue(row, ["PRODUCTO", "CUENTA"]) || '').toString().trim();
     const base = this.baseGeneral.get(product);
-    let motivoNP = (this.getFieldValue(row, ["MOTIVO DE NO PAGO ", "MOTIVO DE NO PAGO", "Motivo"]) || '').toString().trim();
+    let motivoNP = (this.getFieldValue(row, ["MOTIVO DE NO PAGO ", "MOTIVO DE NO PAGO", "Motivo", "Motivos", "Causal", "Causales", "Causal no pago", "Motivo no pago", "Comentario", "Gestión", "Gestion", "Observacion", "Observación", "OBSERVACIONES", "OBSERVACIÓN", "OBSERVACION"]) || '').toString().trim();
     // Corrección específica: 1474 -> 1473
     motivoNP = motivoNP.replace(/No Contesta - Numero Activo 1474/g, 'No Contesta - Numero Activo 1473');
     
