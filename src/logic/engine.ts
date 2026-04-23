@@ -425,7 +425,6 @@ export class ProcessingEngine {
       'numeromarcado': r.telefono_maestro || '',
       'identificacion': r.cedula_maestra || '',
       'cuenta': r.producto || '',
-      'error_detalle': r.motivo_error || 'SIN ERRORES',
       'valorprome': '',
       'fechaprome': '',
       'cuota': ''
