@@ -203,6 +203,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
   };
 
+  const processData = async () => {
     console.log('>>> CLICK EN VALIDACION <<<');
     
     // Verificar archivos antes de arrancar
