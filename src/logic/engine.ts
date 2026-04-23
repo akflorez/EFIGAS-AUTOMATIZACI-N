@@ -400,17 +400,31 @@ export class ProcessingEngine {
   public processAll(movilidadData: any[], terrenoData: any[], start?: string, end?: string): RegistroNormalizado[] {
     const results: RegistroNormalizado[] = [];
     
+    // Filtrar y procesar Movilidad
     movilidadData.forEach(row => {
+      if (!row) return;
+      const product = (this.getFieldValue(row, ["Producto", "CUENTA", "CUENTA_CONTRATO"]) || '').toString().trim();
+      // Si no tiene cuenta, es una fila vacía o basura del Excel
+      if (!product || product === '0' || product === '-') return;
+      
       const dateStr = this.extractDateFromRow(row);
       if (start && dateStr && dateStr < start) return;
       if (end && dateStr && dateStr > end) return;
+      
       results.push(this.homologateMovilidad(row));
     });
 
+    // Filtrar y procesar Terreno
     terrenoData.forEach(row => {
+      if (!row) return;
+      const product = (this.getFieldValue(row, ["PRODUCTO", "CUENTA", "SUSCRIPTOR"]) || '').toString().trim();
+      // Si no tiene cuenta, es una fila vacía o basura del Excel
+      if (!product || product === '0' || product === '-') return;
+
       const dateStr = this.extractDateFromRow(row);
       if (start && dateStr && dateStr < start) return;
       if (end && dateStr && dateStr > end) return;
+      
       results.push(this.homologateTerreno(row));
     });
 

@@ -24,15 +24,22 @@ export class ReportEngine {
     // 2. Use the original template sheet directly
     const targetSheet = originalSheet;
     
-    // 3. Clear existing data in template to avoid "ghost" rows from previous uses
-    // Clear targetSheet from Row 8 downwards
+    // 3. Clear existing data in template only in columns we write to
+    // This preserves formulas in other columns (like Column D in Comments)
     for (let r = 8; r <= Math.min(targetSheet.rowCount, 5000); r++) {
-      targetSheet.getRow(r).values = [];
+      const row = targetSheet.getRow(r);
+      for (let c = 1; c <= 80; c++) {
+        row.getCell(c).value = null;
+      }
     }
-    // Clear commentsSheet from Row 3 downwards
+    
     if (commentsSheet) {
       for (let r = 3; r <= Math.min(commentsSheet.rowCount, 5000); r++) {
-        commentsSheet.getRow(r).values = [];
+        const row = commentsSheet.getRow(r);
+        row.getCell(1).value = null;
+        row.getCell(2).value = null;
+        row.getCell(3).value = null;
+        // NOT clearing Cell 4 to preserve formula if it exists
       }
     }
 
@@ -94,6 +101,15 @@ export class ReportEngine {
         commentRow.getCell(1).value = orden;
         commentRow.getCell(2).value = codigo;
         commentRow.getCell(3).value = observacion;
+        
+        // Escribir explícitamente en Columna D por si la fórmula no se activa
+        if (orden) {
+           const cleanO = orden.toString().trim();
+           const cleanC = (codigo?.toString() || '').trim();
+           const cleanObs = (observacion?.toString() || '').trim();
+           commentRow.getCell(4).value = `${cleanO} // ${cleanC} // ${cleanObs}`;
+        }
+        
         commentRow.commit();
 
         // --- Sync to TXT Content ---
