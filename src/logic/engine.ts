@@ -19,7 +19,6 @@ export class ProcessingEngine {
   private getFieldValue(row: any, searchTerms: string[]): any {
     if (!row) return undefined;
     const keys = Object.keys(row);
-    // Búsqueda ESTRICTA para evitar traer columnas de ruido
     for (const term of searchTerms) {
       const cleanTerm = this.normalizeText(term).replace(/\s+/g, '');
       const foundKey = keys.find(k => {
@@ -82,7 +81,8 @@ export class ProcessingEngine {
       const original = (this.getFieldValue(row, ["MOTIVO DE NO PAGO CVS", "MOTIVO"]) || "").toString().trim();
       const mejorPerfil = (this.getFieldValue(row, ["MEJOR PERFIL EN CVS", "PERFIL"]) || "").toString().trim();
       const code = this.extractCode(original);
-      if (original && mejorPerfil) {
+      if (original) {
+        if (mejorPerfil) {
           const fullNorm = this.normalizeText(original);
           this.movCausalToPerfilMap.set(fullNorm, mejorPerfil.toUpperCase());
           this.terMotivoToCVSMap.set(fullNorm, original.toUpperCase());
@@ -91,6 +91,7 @@ export class ProcessingEngine {
              this.terMotivoToCVSMap.set(code, original.toUpperCase());
              this.terMotivoToCodeMap.set(fullNorm, code);
           }
+        }
       }
     });
   }
@@ -105,7 +106,7 @@ export class ProcessingEngine {
     const comments: string[] = [];
     for (const field of commentFields) {
       const val = row[field]?.toString().trim();
-      if (val && val.length > 5 && val !== 'null' && val !== '0' && val !== '-') {
+      if (val && val !== 'null' && val !== '0' && val !== '-' && val.length > 3) {
         comments.push(val);
       }
     }
@@ -147,6 +148,11 @@ export class ProcessingEngine {
     return `${year}-${month}-${day}`;
   }
 
+  private removeAccents(str: string): string {
+    if (!str) return '';
+    return str.toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ñ/g, "n").replace(/Ñ/g, "N").toUpperCase().trim();
+  }
+
   private normalizeText(s: string): string {
     if (!s) return "";
     return s.toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -168,8 +174,11 @@ export class ProcessingEngine {
     const product = this.findAnyProduct(row);
     if (!product || product === '0') return null as any;
 
+    // REGLA DE ORO: Si CAUSAL está lleno, hay gestión. Si no, se ignora.
     const causalRaw = (this.getFieldValue(row, ["Causal", "Motivo", "Causales"]) || '').toString().trim();
-    if (!causalRaw || causalRaw === '0' || causalRaw === '-' || causalRaw.length < 4) return null as any;
+    if (!causalRaw || causalRaw === '0' || causalRaw === '-' || causalRaw.length < 2) {
+       return null as any;
+    }
 
     const base = this.baseGeneral.get(product);
     const date = this.formatDate(this.getFieldValue(row, ["Fecha", "Fecha Gestion", "Fecha Completada"])) || '';
@@ -257,23 +266,17 @@ export class ProcessingEngine {
 
   public processAll(movilidadData: any[], terrenoData: any[], start?: string, end?: string): RegistroNormalizado[] {
     const results: RegistroNormalizado[] = [];
-    
     const filterAndAdd = (registro: RegistroNormalizado) => {
       if (!registro) return;
-      
-      // FILTRO DE FECHA OBLIGATORIO: Si hay filtro de fecha, el registro DEBE tener fecha y estar en rango.
       if (start || end) {
-        if (!registro.fecha_gestion) return; // Si no tiene fecha, borrar
+        if (!registro.fecha_gestion) return; 
         if (start && registro.fecha_gestion < start) return;
         if (end && registro.fecha_gestion > end) return;
       }
-      
       results.push(registro);
     };
-
     movilidadData.forEach(row => filterAndAdd(this.homologateMovilidad(row)));
     terrenoData.forEach(row => filterAndAdd(this.homologateTerreno(row)));
-
     return results;
   }
 
