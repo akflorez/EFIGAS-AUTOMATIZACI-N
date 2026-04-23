@@ -12,6 +12,16 @@ export class ProcessingEngine {
   private colIndexDireccion: number = 5; 
   private colIndexContrato: number = 1;  
   
+  // Contadores para diagnóstico
+  public stats = {
+    movTotal: 0,
+    movConCausal: 0,
+    movEnFecha: 0,
+    terTotal: 0,
+    terConMotivo: 0,
+    terEnFecha: 0
+  };
+
   constructor() {
   }
 
@@ -28,7 +38,6 @@ export class ProcessingEngine {
   private getFieldValue(row: any, searchTerms: string[]): any {
     if (!row) return undefined;
     const keys = Object.keys(row);
-    // Búsqueda EXACTA para no confundir columnas de ruido con Causales
     for (const term of searchTerms) {
       const cleanTerm = this.normalizeText(term).replace(/\s+/g, '');
       const foundKey = keys.find(k => {
@@ -45,7 +54,7 @@ export class ProcessingEngine {
     const rawData = data as unknown as any[][];
     const total = rawData.length;
     let headerRowIndex = -1;
-    for (let i = 0; i < Math.min(rawData.length, 30); i++) {
+    for (let i = 0; i < Math.min(rawData.length, 50); i++) {
         const row = rawData[i];
         if (!row || !Array.isArray(row)) continue;
         const rowStr = row.map(v => this.normalizeText(v));
@@ -67,7 +76,7 @@ export class ProcessingEngine {
       for (let j = i; j < end; j++) {
         if (j <= headerRowIndex) continue;
         const row = rawData[j];
-        if (!row || !Array.isArray(row)) continue;
+        if (!row || !Array.isArray(row) || row.length < 2) continue;
         let key = '';
         if (headerRowIndex !== -1) {
           const headerRow = rawData[headerRowIndex];
@@ -152,7 +161,7 @@ export class ProcessingEngine {
     const comments: string[] = [];
     for (const field of commentFields) {
       const val = this.safeString(row[field]);
-      if (val && val.length > 5 && val !== 'null' && val !== '0' && val !== '-') {
+      if (val && val.length > 2 && val !== 'null' && val !== '0' && val !== '-') {
         comments.push(val);
       }
     }
@@ -160,13 +169,16 @@ export class ProcessingEngine {
   }
 
   private homologateMovilidad(row: any): RegistroNormalizado {
+    this.stats.movTotal++;
     const productFound = this.getFieldValue(row, ["Producto", "CUENTA", "SUSCRIPTOR", "CONTRATO"]);
     if (!productFound) return null as any;
     const product = this.safeString(productFound).replace(/\.0$/, '');
 
-    // FILTRO RADICAL: Causal Requerida para Movilidad
+    // Filtro de Causal Flexibilizado (mínimo 1 letra)
     const causalRaw = this.safeString(this.getFieldValue(row, ["Causal", "Motivo", "Causales"]));
-    if (!causalRaw || causalRaw === '0' || causalRaw === '-' || causalRaw.length < 3) return null as any;
+    if (!causalRaw || causalRaw === '0' || causalRaw === '-' || causalRaw.length < 1) return null as any;
+    
+    this.stats.movConCausal++;
 
     const base = this.baseGeneral.get(product);
     const date = this.formatDate(this.getFieldValue(row, ["Fecha", "Fecha Gestion", "Fecha Completada"])) || '';
@@ -207,13 +219,15 @@ export class ProcessingEngine {
   }
 
   private homologateTerreno(row: any): RegistroNormalizado {
+    this.stats.terTotal++;
     const productFound = this.getFieldValue(row, ["PRODUCTO", "CUENTA", "SUSCRIPTOR", "CONTRATO"]);
     if (!productFound) return null as any;
     const product = this.safeString(productFound).replace(/\.0$/, '');
 
-    // Terreno: Tomamos lo que esté en gestión
     let motivoRaw = this.safeString(this.getFieldValue(row, ["MOTIVO DE NO PAGO ", "MOTIVO", "PROCESO"]));
     if (!motivoRaw || motivoRaw === '0' || motivoRaw === '-') return null as any;
+    
+    this.stats.terConMotivo++;
 
     const base = this.baseGeneral.get(product);
     const date = this.formatDate(this.getFieldValue(row, ["Fecha", "Gestionada", "Fecha Gestion"])) || '';
@@ -253,17 +267,21 @@ export class ProcessingEngine {
   }
 
   public processAll(movilidadData: any[], terrenoData: any[], start?: string, end?: string): RegistroNormalizado[] {
+    this.stats = { movTotal: 0, movConCausal: 0, movEnFecha: 0, terTotal: 0, terConMotivo: 0, terEnFecha: 0 };
     const results: RegistroNormalizado[] = [];
     
     const processRegistry = (registro: RegistroNormalizado) => {
       if (!registro) return;
       
-      // FILTRO DE FECHA OBLIGATORIO: Si hay un rango, el registro DEBE tener fecha y estar dentro.
+      // FILTRO DE FECHA: Solo si el usuario seleccionó un rango.
       if (start || end) {
-        if (!registro.fecha_gestion) return; // Si no hay fecha, se borra (ruido)
+        if (!registro.fecha_gestion) return; 
         if (start && registro.fecha_gestion < start) return;
         if (end && registro.fecha_gestion > end) return;
       }
+      
+      if (registro.fuente_principal === 'movilidad') this.stats.movEnFecha++;
+      if (registro.fuente_principal === 'terreno') this.stats.terEnFecha++;
       
       results.push(registro);
     };

@@ -254,16 +254,16 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       
       const results = engine.processAll(files.movilidad.data, files.terreno.data, fechaInicio, fechaFin);
       
-      const movFinal = results.filter(r => r.fuente_principal === 'movilidad').length;
-      const terFinal = results.filter(r => r.fuente_principal === 'terreno').length;
+      const { movTotal, movConCausal, movEnFecha, terTotal, terConMotivo, terEnFecha } = engine.stats;
 
       console.log('Resultados obtenidos:', results.length);
       
       setProgress(95);
-      setStatusMessage(`¡Éxito! Movilidad: ${movFinal} | Terreno: ${terFinal}.`);
       
       if (results.length === 0) {
-        setStatusMessage('Atención: No se encontraron registros con las condiciones actuales (Causal + Fecha).');
+        setStatusMessage(`ATENCIÓN: 0 resultados. Diagnóstico: [Movilidad: ${movTotal} total, ${movConCausal} con causal, ${movEnFecha} en fecha] | [Terreno: ${terTotal} total, ${terConMotivo} con motivo, ${terEnFecha} en fecha]`);
+      } else {
+        setStatusMessage(`¡Éxito! Se encontraron ${results.length} registros válidos. (Mov: ${movEnFecha}, Ter: ${terEnFecha})`);
       }
       
       setResultados(results);
