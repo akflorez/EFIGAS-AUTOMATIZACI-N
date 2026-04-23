@@ -78,11 +78,22 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             const wb = XLSX.read(bstr, { type: 'binary' });
             
         if (type === 'master') {
-          const convSheetName = wb.SheetNames.find(n => n.toUpperCase().includes('CONV'));
-          const baseSheetName = wb.SheetNames.find(n => n.toUpperCase() === 'BASE GENERAL');
+          const sheetNames = wb.SheetNames;
+          const convSheetName = sheetNames.find(n => n.toUpperCase().includes('CONV'));
+          const baseSheetName = sheetNames.find(n => n.toUpperCase().includes('BASE GENERAL'));
           
-          const convData = convSheetName ? XLSX.utils.sheet_to_json(wb.Sheets[convSheetName], { header: 1 }) : [];
-          const baseData = baseSheetName ? XLSX.utils.sheet_to_json(wb.Sheets[baseSheetName], { header: 1 }) : [];
+          if (!convSheetName || !baseSheetName) {
+            const errorMsg = `Error: No se encontró la pestaña "${!convSheetName ? 'CONV' : 'BASE GENERAL'}". Disponibles en este archivo: [${sheetNames.join(', ')}]`;
+            setFiles((prev: DashboardFiles) => ({
+              ...prev,
+              master: { ...prev.master, loaded: false, error: errorMsg, name: file.name }
+            }));
+            alert(errorMsg);
+            return;
+          }
+          
+          const convData = XLSX.utils.sheet_to_json(wb.Sheets[convSheetName]);
+          const baseData = XLSX.utils.sheet_to_json(wb.Sheets[baseSheetName], { header: 1 });
           
           setFiles((prev: DashboardFiles) => ({
             ...prev,
@@ -91,7 +102,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               name: file.name, 
               data: convData, 
               secondaryData: baseData, 
-              error: convSheetName && baseSheetName ? undefined : 'Faltan pestañas requeridas (CONV o BASE GENERAL)' 
+              error: undefined
             }
           }));
         } else if (type === 'terreno' || type === 'movilidad') {
@@ -192,12 +203,23 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
   };
 
-  const processData = async () => {
-    // Resetear estados para asegurar feedback visual limpio
+    console.log('>>> CLICK EN VALIDACION <<<');
+    
+    // Verificar archivos antes de arrancar
+    const missing = [];
+    if (!files.movilidad.loaded) missing.push("Export Movilidad");
+    if (!files.terreno.loaded) missing.push("Gestión Terreno");
+    if (!files.master.loaded) missing.push("Base Seguimiento (Master)");
+    
+    if (missing.length > 0) {
+      alert(`⚠️ NO SE PUEDE INICIAR:\nFaltan los siguientes archivos:\n- ${missing.join('\n- ')}\n\nPor favor cárguelos antes de continuar.`);
+      return;
+    }
+
     setResultados([]);
     setProcessing(true);
     setProgress(2);
-    setStatusMessage('Iniciando Motor de Procesamiento (Efigas v46)...');
+    setStatusMessage('Iniciando Motor de Procesamiento (Efigas v46.10.2)...');
     
     // Pequeño delay para dejar que la UI respire y muestre el loader
     await new Promise(r => setTimeout(r, 100));
@@ -557,11 +579,13 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                         </p>
                         <button 
                           onClick={processData}
-                          disabled={!files.movilidad.loaded || !files.terreno.loaded || !files.master.loaded}
-                          className="btn-premium flex items-center gap-3 mx-auto px-10 py-5 text-xl group"
+                          className="btn-premium flex flex-col items-center gap-1 mx-auto px-10 py-5 text-xl group"
                         >
-                           Iniciar Validación y Cruce
-                           <ChevronRight className="group-hover:translate-x-1 transition-transform" />
+                           <div className="flex items-center gap-3">
+                             Iniciar Validación y Cruce
+                             <ChevronRight className="group-hover:translate-x-1 transition-transform" />
+                           </div>
+                           <span className="text-[10px] opacity-50 font-medium tracking-widest">MOTOR v46.10.2 ACTIVE</span>
                         </button>
                       </>
                     )}
