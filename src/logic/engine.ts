@@ -291,9 +291,10 @@ export class ProcessingEngine {
     // Intentamos buscarlo en el maestro para el "Mejor Perfil", si no, el label de la causal
     let perfil = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(normText) || causalLabel || 'REVISIÓN MANUAL';
     
-    // Motivo de No Pago: CONCAT(Tipo Comentarios) + Código del de no pago (v46 audio corregido)
-    const mappedMotCode = this.terMotivoToCodeMap.get(idCausal) || this.terMotivoToCodeMap.get(normText) || idCausal;
-    const motivoNP = `${comments} ${mappedMotCode}`.trim().toUpperCase();
+    // Motivo de No Pago: Priorizar código del archivo, si no, buscar en maestro
+    const mappedMotCode = idCausal || this.terMotivoToCodeMap.get(normText) || '';
+    const cleanLabel = causalRaw.replace(idCausal, '').replace(/^[-\s]+/, '').trim().toUpperCase();
+    const motivoNP = `${cleanLabel} ${mappedMotCode}`.trim().toUpperCase();
 
     return {
       id_sistema: `MOV-${product}-${Date.now()}`,
@@ -349,9 +350,10 @@ export class ProcessingEngine {
     // Si aún así no hay, usamos un fallback inteligente o la etiqueta original antes de REVISIÓN MANUAL
     perfil = perfil || motivoNP.toUpperCase() || 'REVISIÓN MANUAL';
     
-    // Motivo Terreno: Si existe en el maestro (MOTIVO PAGO CVS), lo usamos. Si no, literal.
-    let motivoCVS = this.terMotivoToCVSMap.get(codeM) || this.terMotivoToCVSMap.get(normM) || motivoNP.toUpperCase();
-    let mappedMotCode = this.terMotivoToCodeMap.get(codeM) || this.terMotivoToCodeMap.get(normM) || codeM;
+    // Motivo Terreno: Priorizar código del archivo, si no, buscar en maestro
+    const mappedMotCode = codeM || this.terMotivoToCodeMap.get(normM) || '';
+    const cleanLabel = motivoNP.replace(codeM, '').replace(/^[-\s]+/, '').trim().toUpperCase();
+    const motivoCVS = `${cleanLabel} ${mappedMotCode}`.trim().toUpperCase();
 
     return {
       id_sistema: `TER-${product}-${Date.now()}`,
