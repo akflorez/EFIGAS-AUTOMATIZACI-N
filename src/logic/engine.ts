@@ -15,9 +15,14 @@ export class ProcessingEngine {
   constructor() {
   }
 
-  private normalizeText(s: string): string {
-    if (!s) return "";
+  private normalizeText(s: any): string {
+    if (s === null || s === undefined) return "";
     return s.toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
+  private safeString(val: any): string {
+    if (val === null || val === undefined) return "";
+    return val.toString().trim();
   }
 
   private getFieldValue(row: any, searchTerms: string[]): any {
@@ -37,15 +42,14 @@ export class ProcessingEngine {
   public async indexBaseGeneral(data: BaseGeneralRaw[], onProgress: (p: number) => void) {
     if (!data || data.length === 0) { onProgress(100); return; }
     
-    // Forzamos a que trate la data como un array de arrays (header: 1 del Excel)
     const rawData = data as unknown as any[][];
     const total = rawData.length;
     let headerRowIndex = -1;
     
-    for (let i = 0; i < Math.min(rawData.length, 20); i++) {
+    for (let i = 0; i < Math.min(rawData.length, 30); i++) {
         const row = rawData[i];
         if (!row || !Array.isArray(row)) continue;
-        const rowStr = row.map(v => this.normalizeText(v?.toString() || ""));
+        const rowStr = row.map(v => this.normalizeText(v));
         if (rowStr.some(v => v.includes('producto') || v.includes('contrato') || v.includes('cuenta'))) {
           headerRowIndex = i;
           rowStr.forEach((val, idx) => {
@@ -70,13 +74,13 @@ export class ProcessingEngine {
         if (headerRowIndex !== -1) {
           const headerRow = rawData[headerRowIndex];
           const prodIdx = headerRow.findIndex((h: any) => {
-             const nh = this.normalizeText(h?.toString() || "");
+             const nh = this.normalizeText(h);
              return nh.includes('producto') || nh.includes('cuenta') || nh.includes('contrato');
           });
-          if (prodIdx !== -1) key = (row[prodIdx] || '').toString().trim();
-          else key = (row[1] || '').toString().trim();
+          if (prodIdx !== -1) key = this.safeString(row[prodIdx]);
+          else key = this.safeString(row[1]);
         } else {
-          key = (row[1] || '').toString().trim();
+          key = this.safeString(row[1]);
         }
         
         if (key) {
@@ -92,8 +96,8 @@ export class ProcessingEngine {
   public indexMasters(maestroData: any[]) {
     if (!maestroData) return;
     maestroData.forEach(row => {
-      const original = (this.getFieldValue(row, ["MOTIVO DE NO PAGO CVS", "MOTIVO"]) || "").toString().trim();
-      const mejorPerfil = (this.getFieldValue(row, ["MEJOR PERFIL EN CVS", "PERFIL"]) || "").toString().trim();
+      const original = this.safeString(this.getFieldValue(row, ["MOTIVO DE NO PAGO CVS", "MOTIVO"]));
+      const mejorPerfil = this.safeString(this.getFieldValue(row, ["MEJOR PERFIL EN CVS", "PERFIL"]));
       const code = this.extractCode(original);
       if (original) {
           const fullNorm = this.normalizeText(original);
@@ -118,7 +122,7 @@ export class ProcessingEngine {
     let date: Date | null = null;
     if (val instanceof Date) { date = val; } 
     else {
-      const dStr = val.toString().trim();
+      const dStr = this.safeString(val);
       if (!dStr || dStr === '-' || dStr === '0') return '';
       const numVal = Number(dStr);
       if (!isNaN(numVal) && numVal > 40000 && numVal < 60000) {
@@ -154,7 +158,7 @@ export class ProcessingEngine {
     });
     const comments: string[] = [];
     for (const field of commentFields) {
-      const val = row[field]?.toString().trim();
+      const val = this.safeString(row[field]);
       if (val && val !== 'null' && val !== '0' && val !== '-' && val.length > 3) comments.push(val);
     }
     return comments.join(', ').toUpperCase();
@@ -163,9 +167,9 @@ export class ProcessingEngine {
   private homologateMovilidad(row: any): RegistroNormalizado {
     const productFound = this.getFieldValue(row, ["Producto", "CUENTA", "SUSCRIPTOR", "CONTRATO"]);
     if (!productFound) return null as any;
-    const product = productFound.toString().trim().replace(/\.0$/, '');
+    const product = this.safeString(productFound).replace(/\.0$/, '');
 
-    const causalRaw = (this.getFieldValue(row, ["Causal", "Motivo", "Causales"]) || '').toString().trim();
+    const causalRaw = this.safeString(this.getFieldValue(row, ["Causal", "Motivo", "Causales"]));
     if (!causalRaw || causalRaw === '0' || causalRaw === '-' || causalRaw.length < 2) return null as any;
 
     const base = this.baseGeneral.get(product);
@@ -177,17 +181,17 @@ export class ProcessingEngine {
     const normCausal = this.normalizeText(causalRaw);
 
     const perfilFromMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(normCausal);
-    const perfil = (perfilFromMaestro || cleanLabel || 'REVISIÓN MANUAL').toString().replace(/\d+/g, '').replace(/^[-\s]+/, '').trim().toUpperCase();
+    const perfil = (perfilFromMaestro || cleanLabel || 'REVISIÓN MANUAL').toString().toUpperCase().trim();
 
     const mappedMotDescription = this.terMotivoToCVSMap.get(idCausal) || this.terMotivoToCVSMap.get(normCausal);
     const motivoNP = (mappedMotDescription || `${cleanLabel} ${idCausal}`).trim().toUpperCase();
 
     return {
       id_sistema: `MOV-${product}-${date}-${Math.random()}`,
-      contrato: (base ? base[this.colIndexContrato] : '').toString(),
+      contrato: base ? this.safeString(base[this.colIndexContrato]) : '',
       producto: product,
-      cliente: (base ? base[this.colIndexNombre] : '').toString(),
-      direccion: (base ? base[this.colIndexDireccion] : '').toString(),
+      cliente: base ? this.safeString(base[this.colIndexNombre]) : '',
+      direccion: base ? this.safeString(base[this.colIndexDireccion]) : '',
       causal: obsLarga || cleanLabel,
       codigo_causal: idCausal,
       tipo_comentario: '',
@@ -201,8 +205,8 @@ export class ProcessingEngine {
       fuente_principal: 'movilidad',
       identificacion_valida: !!base,
       perfil_maestro: perfil,
-      cedula_maestra: (base ? base[this.colIndexCedula] : '').toString(),
-      telefono_maestro: (this.getFieldValue(row, ["celular", "telefono"]) || '').toString(),
+      cedula_maestra: base ? this.safeString(base[this.colIndexCedula]) : '',
+      telefono_maestro: this.safeString(this.getFieldValue(row, ["celular", "telefono"])),
       comentarios_concatenados: obsLarga,
       motivo_error: ''
     };
@@ -211,35 +215,37 @@ export class ProcessingEngine {
   private homologateTerreno(row: any): RegistroNormalizado {
     const productFound = this.getFieldValue(row, ["PRODUCTO", "CUENTA", "SUSCRIPTOR", "CONTRATO"]);
     if (!productFound) return null as any;
-    const product = productFound.toString().trim().replace(/\.0$/, '');
+    const product = this.safeString(productFound).replace(/\.0$/, '');
 
-    let motivoNP = (this.getFieldValue(row, ["MOTIVO DE NO PAGO ", "MOTIVO", "PROCESO"]) || '').toString().trim();
-    if (!motivoNP || motivoNP === '0' || motivoNP === '-') return null as any;
+    let motivoRaw = this.safeString(this.getFieldValue(row, ["MOTIVO DE NO PAGO ", "MOTIVO", "PROCESO"]));
+    if (!motivoRaw || motivoRaw === '0' || motivoRaw === '-') return null as any;
 
     const base = this.baseGeneral.get(product);
     const date = this.formatDate(this.getFieldValue(row, ["Fecha", "Gestionada", "Fecha Gestion"])) || '';
-    const codeM = this.extractCode(motivoNP);
-    const normM = this.normalizeText(motivoNP);
-    const perfil = (this.movCausalToPerfilMap.get(codeM) || this.movCausalToPerfilMap.get(normM) || '').toString().replace(/\d+/g, '').replace(/^[-\s]+/, '').trim().toUpperCase() || 'REVISIÓN MANUAL';
+    const codeM = this.extractCode(motivoRaw);
+    const normM = this.normalizeText(motivoRaw);
+    const perfilRaw = this.movCausalToPerfilMap.get(codeM) || this.movCausalToPerfilMap.get(normM) || '';
+    const perfil = (perfilRaw || 'REVISIÓN MANUAL').toString().toUpperCase().trim();
+    
     const mappedMotDescription = this.terMotivoToCVSMap.get(codeM) || this.terMotivoToCVSMap.get(normM);
-    const cleanLabel = motivoNP.replace(codeM, '').replace(/^[-\s]+/, '').trim().toUpperCase();
+    const cleanLabel = motivoRaw.replace(codeM, '').replace(/^[-\s]+/, '').trim().toUpperCase();
     const motivoCVS = (mappedMotDescription || `${cleanLabel} ${codeM}`).trim().toUpperCase();
-    const obs = (this.getFieldValue(row, ["OBSERVACIONES", "DETALLE", "GESTION"]) || '').toString().toUpperCase();
+    const obs = this.safeString(this.getFieldValue(row, ["OBSERVACIONES", "DETALLE", "GESTION"])).toUpperCase();
 
     return {
       id_sistema: `TER-${product}-${date}-${Math.random()}`,
-      contrato: (base ? base[this.colIndexContrato] : '').toString(),
+      contrato: base ? this.safeString(base[this.colIndexContrato]) : '',
       producto: product,
-      cliente: (base ? base[this.colIndexNombre] : '').toString(),
-      direccion: (base ? base[this.colIndexDireccion] : '').toString(),
-      cedula_maestra: (base ? base[this.colIndexCedula] : '').toString(),
-      telefono_maestro: (this.getFieldValue(row, ["celular", "telefono"]) || '').toString(),
+      cliente: base ? this.safeString(base[this.colIndexNombre]) : '',
+      direccion: base ? this.safeString(base[this.colIndexDireccion]) : '',
+      cedula_maestra: base ? this.safeString(base[this.colIndexCedula]) : '',
+      telefono_maestro: this.safeString(this.getFieldValue(row, ["celular", "telefono"])),
       causal: obs || cleanLabel,
       codigo_causal: codeM,
       tipo_comentario: '',
       codigo_tipo_comentario: '',
-      motivo_no_pago_original: motivoNP,
-      motivo_no_pago_consolidado: motivoCVS,
+      motivo_no_pago_original: motivoRaw,
+      motivo_no_pago_consolidated: motivoCVS,
       fecha_gestion: date,
       estado_cruce: 'automatico',
       estado_homologacion: perfil && perfil !== 'REVISIÓN MANUAL' ? 'exitosa' : 'pendiente',
@@ -272,12 +278,12 @@ export class ProcessingEngine {
 
   public createExportData(resultados: RegistroNormalizado[]): any[] {
     return resultados.map(r => ({
-      'gestion': (r.causal || '').toString().toUpperCase().trim(),
+      'gestion': this.safeString(r.causal).toUpperCase(),
       'usuario': 'jairo.quintero132',
       'fechagestion': r.fecha_gestion,
       'accion': 'VISITA',
-      'perfil': (r.perfil_maestro || '').toString().toUpperCase().trim(),
-      'motivonopago': (r.motivo_no_pago_consolidado || '').toString().toUpperCase().trim(),
+      'perfil': this.safeString(r.perfil_maestro).toUpperCase(),
+      'motivonopago': this.safeString(r.motivo_no_pago_consolidado).toUpperCase(),
       'numeromarcado': r.telefono_maestro || '',
       'identificacion': r.cedula_maestra || '',
       'cuenta': r.producto || '',
