@@ -26,8 +26,8 @@ export class ReportEngine {
     const targetSheet = originalSheet;
     
     // 3. Clear existing data in template only in columns we write to
-    // This preserves formulas in other columns (like Column D in Comments)
-    for (let r = 8; r <= Math.min(targetSheet.rowCount, 5000); r++) {
+    // We clear up to 35,000 rows to ensure no old data remains
+    for (let r = 8; r <= 35000; r++) {
       const row = targetSheet.getRow(r);
       for (let c = 1; c <= 80; c++) {
         row.getCell(c).value = null;
@@ -35,12 +35,12 @@ export class ReportEngine {
     }
     
     if (commentsSheet) {
-      for (let r = 3; r <= Math.min(commentsSheet.rowCount, 5000); r++) {
+      for (let r = 3; r <= 35000; r++) {
         const row = commentsSheet.getRow(r);
         row.getCell(1).value = null;
         row.getCell(2).value = null;
         row.getCell(3).value = null;
-        row.getCell(4).value = null; // Clear old text to be safe
+        row.getCell(4).value = null; 
       }
     }
 
@@ -54,8 +54,6 @@ export class ReportEngine {
       
       // FILTRO: Solo si el producto está en la lista de resultados gestionados
       if (filterIds && filterIds.size > 0) {
-         // Intentar buscar el producto. Suele estar en índice 2 (Col C) o similar.
-         // En el engine v46, el producto se extrae de la base general.
          const product = (baseRow[2] || '').toString().trim();
          if (!filterIds.has(product)) continue;
       }
