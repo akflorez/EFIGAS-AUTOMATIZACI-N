@@ -287,9 +287,8 @@ export class ProcessingEngine {
     const causalLabel = causalRaw.replace(idCausal, '').replace(/^[- ]+/, '').trim().toUpperCase();
     const normText = this.normalizeText(causalRaw.replace(idCausal, ''));
     
-    // Perfil Movilidad: Mantener descripción limpia sin códigos
-    let perfilRaw = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(normText) || causalLabel;
-    let perfil = (perfilRaw || '').toString().replace(/\d+/g, '').replace(/^[-\s]+/, '').trim().toUpperCase() || 'REVISIÓN MANUAL';
+    // Perfil Movilidad: Tomar DIRECTAMENTE de la causal (sin cruce con maestro)
+    let perfil = (causalLabel || '').toString().replace(/\d+/g, '').replace(/^[-\s]+/, '').trim().toUpperCase() || 'REVISIÓN MANUAL';
     
     // Motivo de No Pago: Priorizar código del archivo, si no, buscar en maestro
     const mappedMotCode = idCausal || this.terMotivoToCodeMap.get(normText) || '';
@@ -358,15 +357,15 @@ export class ProcessingEngine {
     const cleanLabel = motivoNP.replace(codeM, '').replace(/^[-\s]+/, '').trim().toUpperCase();
     const motivoCVS = `${cleanLabel} ${mappedMotCode}`.trim().toUpperCase();
 
-    // Perfil Terreno: Mantener descripción limpia sin códigos
-    let perfilRaw = perfil || cleanLabel;
-    perfil = (perfilRaw || '').toString().replace(/\d+/g, '').replace(/^[-\s]+/, '').trim().toUpperCase() || 'REVISIÓN MANUAL';
+    // Perfil Terreno: CRUCE OBLIGATORIO con Maestro (CONV)
+    let perfilFound = perfil; // 'perfil' ya viene del mapeo arriba
+    perfil = (perfilFound || '').toString().replace(/\d+/g, '').replace(/^[-\s]+/, '').trim().toUpperCase() || 'REVISIÓN MANUAL';
 
     let error = '';
     if (!product) error = 'Producto/Cuenta vacío en archivo. ';
     if (!base) error += 'Producto no existe en Base General. ';
     if (!motivoNP) error += 'Columna de Motivo No Pago no encontrada o vacía. ';
-    if (perfil === 'REVISIÓN MANUAL') error += 'Causal no mapeada en Maestro. ';
+    if (perfil === 'REVISIÓN MANUAL') error += 'Motivo no encontrado en Maestro (CONV). ';
 
     return {
       id_sistema: `TER-${product}-${Date.now()}`,
