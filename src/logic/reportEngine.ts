@@ -24,20 +24,29 @@ export class ReportEngine {
     // 2. Use the original template sheet directly
     const targetSheet = originalSheet;
     
-    // 3. Process Sheet (A partir de fila 8)
-    // baseGeneralRaw index 0 might be headers if not skipped. 
-    // Usually user says "a partir de fila 8" in template, but base general is just data.
-    baseGeneralRaw.forEach((baseRow, index) => {
-      // Skip headers in base if present (assuming index 0 is header)
-      if (index === 0) return;
-      
-      const templateRowNumber = 8 + (index - 1);
+    // 3. Clear existing data in template to avoid "ghost" rows from previous uses
+    // Clear targetSheet from Row 8 downwards
+    for (let r = 8; r <= Math.min(targetSheet.rowCount, 5000); r++) {
+      targetSheet.getRow(r).values = [];
+    }
+    // Clear commentsSheet from Row 3 downwards
+    if (commentsSheet) {
+      for (let r = 3; r <= Math.min(commentsSheet.rowCount, 5000); r++) {
+        commentsSheet.getRow(r).values = [];
+      }
+    }
+
+    // 4. Process and Sync Sheets (Single Loop)
+    let txtContent = '';
+    
+    // We skip headers in baseGeneralRaw (index 0)
+    for (let i = 1; i < baseGeneralRaw.length; i++) {
+      const baseRow = baseGeneralRaw[i];
+      const templateRowNumber = 8 + (i - 1);
       const targetRow = targetSheet.getRow(templateRowNumber);
 
       // --- Main Mapping: Base B:BI (indices 1-60) -> Template A:BH (indices 1-60) ---
       for (let col = 1; col <= 60; col++) {
-        // La columna O de la base es índice 14. La columna N de la plantilla es índice 14.
-        // Forzamos que si es la columna 14 (N), traiga siempre la O (14).
         const val = baseRow[col];
         if (val !== undefined) targetRow.getCell(col).value = val;
       }
@@ -47,84 +56,51 @@ export class ReportEngine {
       if (cedulaVal) targetRow.getCell(14).value = cedulaVal;
 
       // --- Special Mappings ---
-      // BK(63) ← Base BM(64)
-      targetRow.getCell(63).value = baseRow[64];
-      // BL(64) ← Base BN(65)
-      targetRow.getCell(64).value = baseRow[65];
-      // BM(65) ← Base BS(70)
-      targetRow.getCell(65).value = baseRow[70];
-      // BN(66) ← Base CD(81)
-      targetRow.getCell(66).value = baseRow[81];
-      // BP(68) ← Base CC(80)
-      targetRow.getCell(68).value = baseRow[80];
-      // BR(70) ← Base CJ(87)
-      targetRow.getCell(70).value = baseRow[87];
-      // BS(71) ← Base CM(90)
-      targetRow.getCell(71).value = baseRow[90];
-      // BT(72) ← Base CN(91)
-      targetRow.getCell(72).value = baseRow[91];
-      // BU(73) ← Base CO(92)
-      targetRow.getCell(73).value = baseRow[92];
+      targetRow.getCell(63).value = baseRow[64]; // BK(63) ← Base BM(64)
+      targetRow.getCell(64).value = baseRow[65]; // BL(64) ← Base BN(65)
+      targetRow.getCell(65).value = baseRow[70]; // BM(65) ← Base BS(70)
+      targetRow.getCell(66).value = baseRow[81]; // BN(66) ← Base CD(81)
+      targetRow.getCell(68).value = baseRow[80]; // BP(68) ← Base CC(80)
+      targetRow.getCell(70).value = baseRow[87]; // BR(70) ← Base CJ(87)
+      targetRow.getCell(71).value = baseRow[90]; // BS(71) ← Base CM(90)
+      targetRow.getCell(72).value = baseRow[91]; // BT(72) ← Base CN(91)
+      targetRow.getCell(73).value = baseRow[92]; // BU(73) ← Base CO(92)
 
-      // --- BO (67) Extraer código de BN (66). Evitar Cédulas (más de 5 dígitos) ---
+      // --- BO (67) Extraer código de BN (66). Evitar Cédulas ---
       let bnValue = baseRow[81]?.toString() || '';
-      // Corrección específica: 1474 -> 1473
       bnValue = bnValue.replace(/No Contesta - Numero Activo 1474/g, 'No Contesta - Numero Activo 1473');
-      
-      const bnMatch = bnValue.match(/\b\d{1,5}\b/g); // Busca números de 1 a 5 dígitos únicamente
+      const bnMatch = bnValue.match(/\b\d{1,5}\b/g); 
       if (bnMatch) {
         targetRow.getCell(67).value = bnMatch[bnMatch.length - 1];
       }
 
       // --- BQ (69) Extraer código de BP ---
-      // BP (68) mantiene el texto completo de Base CC (80)
       let bpBaseValue = baseRow[80]?.toString() || '';
-      // Corrección específica: 1474 -> 1473
       bpBaseValue = bpBaseValue.replace(/No Contesta - Numero Activo 1474/g, 'No Contesta - Numero Activo 1473');
-      
-      targetRow.getCell(68).value = bpBaseValue; 
-      
       const bpMatch = bpBaseValue.match(/\b\d{1,5}\b/g); 
       if (bpMatch) {
-        targetRow.getCell(69).value = bpMatch[bpMatch.length - 1]; // BQ solo con número
+        targetRow.getCell(69).value = bpMatch[bpMatch.length - 1];
       }
 
       targetRow.commit();
-    });
 
-    // 5. Update COMENTARIOS MASIVO (Preserving Formulas)
-    if (commentsSheet) {
-      for (let i = 0; i < baseGeneralRaw.length - 1; i++) {
-        const sourceRow = targetSheet.getRow(8 + i);
-        const targetRow = commentsSheet.getRow(3 + i);
+      // --- Sync to COMENTARIOS MASIVO ---
+      if (commentsSheet) {
+        const commentRow = commentsSheet.getRow(3 + (i - 1));
+        const orden = targetRow.getCell(7).value;
+        const codigo = targetRow.getCell(67).value; // BO
+        const observacion = targetRow.getCell(70).value; // BR
 
-        // A (1): numero de orden ← G (7)
-        targetRow.getCell(1).value = sourceRow.getCell(7).value;
-        // B (2): codigo de comentario ← BO (67)
-        targetRow.getCell(2).value = sourceRow.getCell('BO').value;
-        // C (3): observacion ← BR (70)
-        targetRow.getCell(3).value = sourceRow.getCell('BR').value;
+        commentRow.getCell(1).value = orden;
+        commentRow.getCell(2).value = codigo;
+        commentRow.getCell(3).value = observacion;
+        commentRow.commit();
 
-        targetRow.commit();
-      }
-    }
-
-    // 6. Generate TXT content for COMENTARIOS MASIVO
-    let txtContent = '';
-    if (commentsSheet) {
-      for (let i = 0; i < baseGeneralRaw.length - 1; i++) {
-        const sourceRow = targetSheet.getRow(8 + i);
-        // Usar los valores ya mapeados en la fila del informe
-        const orden = sourceRow.getCell(7).value?.toString() || '';
-        const codigo = sourceRow.getCell('BO').value?.toString() || '';
-        const observacion = sourceRow.getCell('BR').value?.toString() || '';
-
+        // --- Sync to TXT Content ---
         if (orden) {
-          // Limpieza solicitada: eliminar {}, " y usar //
-          const cleanOrden = orden.replace(/[{}]/g, '').replace(/"/g, '').trim();
-          const cleanCodigo = codigo.replace(/[{}]/g, '').replace(/"/g, '').trim();
-          const cleanObservacion = observacion.replace(/[{}]/g, '').replace(/"/g, '').trim();
-          
+          const cleanOrden = orden.toString().replace(/[{}]/g, '').replace(/"/g, '').trim();
+          const cleanCodigo = (codigo?.toString() || '').replace(/[{}]/g, '').replace(/"/g, '').trim();
+          const cleanObservacion = (observacion?.toString() || '').replace(/[{}]/g, '').replace(/"/g, '').trim();
           txtContent += `${cleanOrden} // ${cleanCodigo} // ${cleanObservacion}\n`;
         }
       }
