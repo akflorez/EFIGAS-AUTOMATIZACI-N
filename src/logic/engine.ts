@@ -27,15 +27,6 @@ export class ProcessingEngine {
       });
       if (foundKey) return row[foundKey];
     }
-    for (const term of searchTerms) {
-      const cleanTerm = this.normalizeText(term).replace(/\s+/g, '');
-      if (cleanTerm.length < 3) continue; 
-      const foundKey = keys.find(k => {
-        const ck = this.normalizeText(k).replace(/\s+/g, '');
-        return ck.includes(cleanTerm) || cleanTerm.includes(ck);
-      });
-      if (foundKey) return row[foundKey];
-    }
     return undefined;
   }
 
@@ -93,7 +84,6 @@ export class ProcessingEngine {
       if (original) {
         if (mejorPerfil) {
           const fullNorm = this.normalizeText(original);
-          // Mapeo de Motivo CVS -> Perfil
           this.movCausalToPerfilMap.set(fullNorm, mejorPerfil.toUpperCase());
           this.terMotivoToCVSMap.set(fullNorm, original.toUpperCase());
           if (code) {
@@ -110,14 +100,13 @@ export class ProcessingEngine {
     const keys = Object.keys(row);
     const commentFields = keys.filter(k => {
       const sk = k.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      // Priorizar campos que SON de observación
       return (sk.includes('observaci') || sk.includes('detalle') || sk.includes('gestion') || sk.includes('comentario') || sk.includes('nota')) 
-             && !sk.includes('causal') && !sk.includes('motivo') && !sk.includes('fecha') && !sk.includes('hora');
+             && !sk.includes('causal') && !sk.includes('fecha');
     });
     const comments: string[] = [];
     for (const field of commentFields) {
       const val = row[field]?.toString().trim();
-      if (val && val !== 'null' && val !== 'undefined' && val !== '0' && val !== '-' && val.length > 5) {
+      if (val && val !== 'null' && val !== '0' && val !== '-' && val.length > 5) {
         comments.push(val);
       }
     }
@@ -185,50 +174,32 @@ export class ProcessingEngine {
        const d = this.formatDate(row[priorityKey]);
        if (d) return d;
     }
-    const dateKeys = keys.filter(k => {
-      const lk = this.normalizeText(k);
-      return (lk.includes('fecha') || lk.includes('time')) && !lk.includes('nacimiento');
-    });
-    for (const k of dateKeys) {
-      const d = this.formatDate(row[k]);
-      if (d && (d.startsWith('2025') || d.startsWith('2026'))) return d;
-    }
     return null;
   }
 
-  private findAnyProduct(row: any): string {
-    const keys = Object.keys(row);
-    const searchTerms = ["Producto", "CUENTA", "SUSCRIPTOR", "CONTRATO"];
-    const found = this.getFieldValue(row, searchTerms);
-    if (found) return found.toString().trim().replace(/\.0$/, '');
-    for (const key of keys) {
-      const val = row[key]?.toString().trim();
-      if (val && /^\d{6,12}(\.0)?$/.test(val)) return val.replace(/\.0$/, '');
-    }
-    return '';
-  }
-
   private homologateMovilidad(row: any): RegistroNormalizado {
-    const product = this.findAnyProduct(row);
+    const product = (this.getFieldValue(row, ["Producto", "CUENTA", "SUSCRIPTOR", "CONTRATO"]) || '').toString().trim().replace(/\.0$/, '');
     const base = this.baseGeneral.get(product);
     const date = this.extractDateFromRow(row) || '';
     const obsLarga = this.consolidateMovilidadComments(row);
     
-    // PRIORIZAR Columnas de Causal/Motivo
+    // EXCLUSIVO PARA MOVILIDAD: Buscar la columna real de Causal/Motivo
     let causalRaw = (this.getFieldValue(row, ["Causal", "Motivo", "Causales", "Causal no pago"]) || '').toString().trim();
-    if (!causalRaw) causalRaw = (this.getFieldValue(row, ["ESTADO", "RESULTADO", "Nota", "Observacion"]) || '').toString().trim();
+    
+    // Validación de Causal Vacía
+    if (!causalRaw || causalRaw === '0' || causalRaw === '-' || causalRaw.toLowerCase() === 'null') {
+       return null as any; // Será filtrado en processAll
+    }
 
     causalRaw = causalRaw.replace(/No Contesta - Numero Activo 1474/g, 'No Contesta - Numero Activo 1473');
     const idCausal = this.extractCode(causalRaw);
     const cleanLabel = causalRaw.replace(idCausal, '').replace(/^[-\s]+/, '').trim().toUpperCase();
     const normCausal = this.normalizeText(causalRaw);
 
-    // INTENTAR Cruce con Maestro para Perfil
     const perfilFromMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(normCausal);
     let perfil = perfilFromMaestro || cleanLabel || 'REVISIÓN MANUAL';
     perfil = perfil.toString().replace(/\d+/g, '').replace(/^[-\s]+/, '').trim().toUpperCase();
 
-    // Motivo CVS cruce
     const mappedMotDescription = this.terMotivoToCVSMap.get(idCausal) || this.terMotivoToCVSMap.get(normCausal);
     const motivoNP = (mappedMotDescription || `${cleanLabel} ${idCausal}`).trim().toUpperCase();
 
@@ -242,7 +213,7 @@ export class ProcessingEngine {
       codigo_causal: idCausal,
       tipo_comentario: '',
       codigo_tipo_comentario: '',
-      motivo_no_pago_original: causalRaw || obsLarga || '',
+      motivo_no_pago_original: causalRaw,
       motivo_no_pago_consolidado: motivoNP,
       fecha_gestion: date,
       estado_cruce: 'automatico',
@@ -259,17 +230,16 @@ export class ProcessingEngine {
   }
 
   private homologateTerreno(row: any): RegistroNormalizado {
-    const product = this.findAnyProduct(row);
+    const product = (this.getFieldValue(row, ["PRODUCTO", "CUENTA", "SUSCRIPTOR", "CONTRATO"]) || '').toString().trim().replace(/\.0$/, '');
     const base = this.baseGeneral.get(product);
     const date = this.extractDateFromRow(row) || '';
     let motivoNP = (this.getFieldValue(row, ["MOTIVO DE NO PAGO ", "MOTIVO", "PROCESO"]) || '').toString().trim();
+    if (!motivoNP || motivoNP === '0' || motivoNP === '-') return null as any;
+
     motivoNP = motivoNP.replace(/No Contesta - Numero Activo 1474/g, 'No Contesta - Numero Activo 1473');
     const codeM = this.extractCode(motivoNP);
     const normM = this.normalizeText(motivoNP);
-    
-    let perfil = this.movCausalToPerfilMap.get(codeM) || this.movCausalToPerfilMap.get(normM);
-    perfil = (perfil || '').toString().replace(/\d+/g, '').replace(/^[-\s]+/, '').trim().toUpperCase() || 'REVISIÓN MANUAL';
-    
+    const perfil = (this.movCausalToPerfilMap.get(codeM) || this.movCausalToPerfilMap.get(normM) || '').toString().replace(/\d+/g, '').replace(/^[-\s]+/, '').trim().toUpperCase() || 'REVISIÓN MANUAL';
     const mappedMotDescription = this.terMotivoToCVSMap.get(codeM) || this.terMotivoToCVSMap.get(normM);
     const cleanLabel = motivoNP.replace(codeM, '').replace(/^[-\s]+/, '').trim().toUpperCase();
     const motivoCVS = (mappedMotDescription || `${cleanLabel} ${codeM}`).trim().toUpperCase();
@@ -305,23 +275,21 @@ export class ProcessingEngine {
     const results: RegistroNormalizado[] = [];
     movilidadData.forEach(row => {
       if (!row) return;
-      const product = this.findAnyProduct(row);
-      if (!product || product === '0') return;
-      const date = this.extractDateFromRow(row);
-      if (start && date && date < start) return;
-      if (end && date && date > end) return;
       const registro = this.homologateMovilidad(row);
-      if (registro.motivo_no_pago_original || registro.causal) results.push(registro);
+      if (registro) {
+          if (start && registro.fecha_gestion && registro.fecha_gestion < start) return;
+          if (end && registro.fecha_gestion && registro.fecha_gestion > end) return;
+          results.push(registro);
+      }
     });
     terrenoData.forEach(row => {
       if (!row) return;
-      const product = this.findAnyProduct(row);
-      if (!product || product === '0') return;
-      const date = this.extractDateFromRow(row);
-      if (start && date && date < start) return;
-      if (end && date && date > end) return;
       const registro = this.homologateTerreno(row);
-      if (registro.motivo_no_pago_original || registro.causal) results.push(registro);
+      if (registro) {
+          if (start && registro.fecha_gestion && registro.fecha_gestion < start) return;
+          if (end && registro.fecha_gestion && registro.fecha_gestion > end) return;
+          results.push(registro);
+      }
     });
     return results;
   }
