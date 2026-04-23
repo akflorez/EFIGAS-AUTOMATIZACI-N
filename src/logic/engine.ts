@@ -114,7 +114,7 @@ export class ProcessingEngine {
     const comments: string[] = [];
     for (const field of commentFields) {
       const val = row[field]?.toString().trim();
-      if (val && val !== 'null' && val !== 'undefined' && val !== '0' && val !== '-' && val.length > 0) {
+      if (val && val !== 'null' && val !== 'undefined' && val !== '0' && val !== '-' && val.length > 1) {
         const cleanVal = val.replace(/^\d+[- ]+/, '');
         comments.push(cleanVal);
       }
@@ -176,16 +176,20 @@ export class ProcessingEngine {
   private extractDateFromRow(row: any): string | null {
     const keys = Object.keys(row);
     const priorityKey = keys.find(k => {
-      const lk = k.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      return lk === 'fecha completada' || lk === 'fecha_gestion' || lk === 'fecha de gestion' || lk.includes('completacio') || lk === 'fecha';
+      const lk = this.normalizeText(k);
+      return (lk.includes('fecha') && (lk.includes('gestion') || lk.includes('completada') || lk.includes('fin'))) 
+             || lk === 'fechagestion' || lk === 'fecha';
     });
-    if (priorityKey && row[priorityKey] && row[priorityKey] !== '-') return this.formatDate(row[priorityKey]);
-    const relevantKeys = keys.filter(k => {
-      const lk = k.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      const isHistorical = lk.includes('penultima') || lk.includes('nacimiento') || lk.includes('creacion') || lk.includes('vencimiento');
-      return (lk.includes('fecha') || lk.includes('time') || lk.includes('gestion') || lk.includes('complet')) && !isHistorical;
+    if (priorityKey && row[priorityKey]) {
+       const d = this.formatDate(row[priorityKey]);
+       if (d) return d;
+    }
+    const dateKeys = keys.filter(k => {
+      const lk = this.normalizeText(k);
+      return (lk.includes('fecha') || lk.includes('time')) 
+             && !lk.includes('nacimiento') && !lk.includes('creacion');
     });
-    for (const k of relevantKeys) {
+    for (const k of dateKeys) {
       const d = this.formatDate(row[k]);
       if (d && (d.startsWith('2025') || d.startsWith('2026'))) return d;
     }
@@ -211,7 +215,7 @@ export class ProcessingEngine {
       producto: product,
       cliente: (base ? base[this.colIndexNombre] : '').toString(),
       direccion: (base ? base[this.colIndexDireccion] : '').toString(),
-      causal: this.consolidateMovilidadComments(row) || cleanLabel,
+      causal: comments || cleanLabel,
       codigo_causal: idCausal,
       tipo_comentario: '',
       codigo_tipo_comentario: '',
@@ -243,6 +247,7 @@ export class ProcessingEngine {
     const mappedMotDescription = this.terMotivoToCVSMap.get(codeM) || this.terMotivoToCVSMap.get(this.normalizeText(motivoNP));
     const cleanLabel = motivoNP.replace(codeM, '').replace(/^[-\s]+/, '').trim().toUpperCase();
     const motivoCVS = (mappedMotDescription || `${cleanLabel} ${codeM}`).trim().toUpperCase();
+    const obs = (this.getFieldValue(row, ["OBSERVACIONES DE CAMPO", "OBSERVACIONES", "OBSERVACION"]) || '').toString().toUpperCase();
 
     return {
       id_sistema: `TER-${product}-${date || Date.now()}`,
@@ -252,7 +257,7 @@ export class ProcessingEngine {
       direccion: (base ? base[this.colIndexDireccion] : '').toString(),
       cedula_maestra: (base ? base[this.colIndexCedula] : '').toString(),
       telefono_maestro: (this.getFieldValue(row, ["celular", "telefono"]) || '').toString(),
-      causal: (this.getFieldValue(row, ["OBSERVACIONES DE CAMPO"]) || '').toString().toUpperCase() || cleanLabel,
+      causal: obs || cleanLabel,
       codigo_causal: codeM,
       tipo_comentario: '',
       codigo_tipo_comentario: '',
@@ -265,7 +270,7 @@ export class ProcessingEngine {
       fuente_principal: 'terreno',
       identificacion_valida: !!base,
       perfil_maestro: perfil,
-      comentarios_concatenados: (this.getFieldValue(row, ["OBSERVACIONES DE CAMPO"]) || '').toString(),
+      comentarios_concatenados: obs,
       motivo_error: ''
     };
   }
@@ -274,6 +279,8 @@ export class ProcessingEngine {
     const resultsMap = new Map<string, RegistroNormalizado>();
     const addOrUpdate = (nuevo: RegistroNormalizado) => {
       if (!nuevo.producto || nuevo.producto === '0') return;
+      const hasRealGestion = (nuevo.motivo_no_pago_original?.length > 3) || (nuevo.causal?.length > 3);
+      if (!hasRealGestion) return;
       const exist = resultsMap.get(nuevo.producto);
       if (!exist || (nuevo.fecha_gestion && nuevo.fecha_gestion >= (exist.fecha_gestion || ''))) {
          resultsMap.set(nuevo.producto, nuevo);
@@ -284,12 +291,9 @@ export class ProcessingEngine {
       if (!row) return;
       const product = (this.getFieldValue(row, ["Producto", "CUENTA", "SUSCRIPTOR", "CONTRATO"]) || '').toString().trim().replace(/\.0$/, '');
       if (!product || product === '0') return;
-
       const date = this.extractDateFromRow(row);
-      // FILTRO FLEXIBLE: Si hay rango de fechas, filtrar. Si no hay rango, incluir TODO.
       if (start && date && date < start) return;
       if (end && date && date > end) return;
-      
       addOrUpdate(this.homologateMovilidad(row));
     });
 
@@ -297,12 +301,9 @@ export class ProcessingEngine {
       if (!row) return;
       const product = (this.getFieldValue(row, ["PRODUCTO", "CUENTA", "SUSCRIPTOR", "CONTRATO"]) || '').toString().trim().replace(/\.0$/, '');
       if (!product || product === '0') return;
-
       const date = this.extractDateFromRow(row);
-      // FILTRO FLEXIBLE
       if (start && date && date < start) return;
       if (end && date && date > end) return;
-      
       addOrUpdate(this.homologateTerreno(row));
     });
 
