@@ -578,12 +578,26 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                         <p className="text-slate-500 mb-10 leading-relaxed text-lg">
                            Cargue los archivos para validar productos y cédulas contra la <span className="font-bold text-emerald-600">Base General</span>. El sistema aplicará el nuevo formato de exportación del Libro de Visitas.
                         </p>
+                        {/* Diagnóstico fijado si hay 0 resultados después de procesar */}
+                        {!processing && statusMessage.includes('ATENCIÓN') && (
+                          <div className="bg-amber-50 border-2 border-amber-200 p-6 rounded-2xl mb-8 animate-in slide-in-from-top duration-300">
+                            <div className="flex items-center gap-3 text-amber-700 mb-2">
+                               <AlertCircle size={20} />
+                               <span className="font-black uppercase text-xs tracking-widest">Diagnóstico de Resultados Cero</span>
+                            </div>
+                            <p className="text-amber-900 text-sm font-bold leading-relaxed">{statusMessage}</p>
+                            <p className="text-[10px] text-amber-600 mt-4 font-medium uppercase tracking-tighter">
+                               Sugerencia: Verifique que las columnas "CAUSAL" o "MOTIVO" tengan datos en sus archivos.
+                            </p>
+                          </div>
+                        )}
+
                         <button 
                           onClick={processData}
                           className="btn-premium flex flex-col items-center gap-1 mx-auto px-10 py-5 text-xl group"
                         >
                            <div className="flex items-center gap-3">
-                             Iniciar Validación y Cruce
+                             {statusMessage.includes('ATENCIÓN') ? 'Reintentar Procesamiento' : 'Iniciar Validación y Cruce'}
                              <ChevronRight className="group-hover:translate-x-1 transition-transform" />
                            </div>
                            <span className="text-[10px] opacity-50 font-medium tracking-widest">MOTOR v46.10.2 ACTIVE</span>
