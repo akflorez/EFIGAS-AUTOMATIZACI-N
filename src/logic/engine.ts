@@ -287,9 +287,9 @@ export class ProcessingEngine {
     const causalLabel = causalRaw.replace(idCausal, '').replace(/^[- ]+/, '').trim().toUpperCase();
     const normText = this.normalizeText(causalRaw.replace(idCausal, ''));
     
-    // Perfil Movilidad: Según audio, es el campo de causal (usamos el label limpio)
-    // Intentamos buscarlo en el maestro para el "Mejor Perfil", si no, el label de la causal
-    let perfil = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(normText) || causalLabel || 'REVISIÓN MANUAL';
+    // Perfil Movilidad: Mantener descripción limpia sin códigos
+    let perfilRaw = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(normText) || causalLabel;
+    let perfil = (perfilRaw || '').toString().replace(/\d+/g, '').replace(/^[-\s]+/, '').trim().toUpperCase() || 'REVISIÓN MANUAL';
     
     // Motivo de No Pago: Priorizar código del archivo, si no, buscar en maestro
     const mappedMotCode = idCausal || this.terMotivoToCodeMap.get(normText) || '';
@@ -353,14 +353,14 @@ export class ProcessingEngine {
         }
       }
     }
-
-    // Si aún así no hay, usamos un fallback inteligente o la etiqueta original antes de REVISIÓN MANUAL
-    perfil = perfil || motivoNP.toUpperCase() || 'REVISIÓN MANUAL';
-    
     // Motivo Terreno: Priorizar código del archivo, si no, buscar en maestro
     const mappedMotCode = codeM || this.terMotivoToCodeMap.get(normM) || '';
     const cleanLabel = motivoNP.replace(codeM, '').replace(/^[-\s]+/, '').trim().toUpperCase();
     const motivoCVS = `${cleanLabel} ${mappedMotCode}`.trim().toUpperCase();
+
+    // Perfil Terreno: Mantener descripción limpia sin códigos
+    let perfilRaw = perfil || cleanLabel;
+    perfil = (perfilRaw || '').toString().replace(/\d+/g, '').replace(/^[-\s]+/, '').trim().toUpperCase() || 'REVISIÓN MANUAL';
 
     let error = '';
     if (!product) error = 'Producto/Cuenta vacío en archivo. ';
