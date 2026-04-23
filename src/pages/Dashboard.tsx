@@ -193,55 +193,66 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   };
 
   const processData = async () => {
-    if (!files.movilidad.loaded || !files.terreno.loaded || !files.master.loaded) {
-      alert('Por favor carga los tres archivos requeridos.');
-      return;
-    }
-    
+    // Resetear estados para asegurar feedback visual limpio
+    setResultados([]);
     setProcessing(true);
-    setProgress(5);
-    setStatusMessage('Iniciando Motor v46.9.8 (Efigas)...');
+    setProgress(2);
+    setStatusMessage('Iniciando Motor de Procesamiento (Efigas v46)...');
+    
+    // Pequeño delay para dejar que la UI respire y muestre el loader
+    await new Promise(r => setTimeout(r, 100));
 
     try {
-      // Instanciar motor
+      console.log('--- INICIO PROCESAMIENTO ---');
+      console.log('Archivos listos:', { 
+        movilidad: files.movilidad.loaded, 
+        terreno: files.terreno.loaded, 
+        master: files.master.loaded 
+      });
+
+      if (!files.movilidad.loaded || !files.terreno.loaded || !files.master.loaded) {
+        throw new Error('Faltan archivos por cargar. Por favor, asegúrese de subir Movilidad, Terreno y Master.');
+      }
+
       const engine = new ProcessingEngine();
       
-      // Fase 0: Indexar Maestro Homologación (v46)
       if (files.maestro.loaded) {
         setStatusMessage('Cargando Maestro de Homologación...');
         engine.indexMasters(files.maestro.data);
       }
 
-      // Fase 1: Indexar Base General
-      setStatusMessage('Analizando Base General...');
-      await engine.indexBaseGeneral(files.master.secondaryData as BaseGeneralRaw[], (p) => {
-        setProgress(5 + Math.floor(p * 0.1)); // 5% a 15%
+      setStatusMessage('Analizando Base General (Cruzando con Master)...');
+      await engine.indexBaseGeneral(files.master.secondaryData as any[], (p) => {
+        setProgress(5 + Math.floor(p * 0.15)); // 5% a 20%
       });
 
-      // Fase 3: Procesamiento Total
-      setStatusMessage('Procesando Orígenes (Movilidad + Terreno)...');
+      setStatusMessage('Aplicando Lógica de Hierro (Filtro de Causal y Fecha)...');
+      setProgress(25);
       
-      const movWithComments = files.movilidad.data.filter((r: any) => engine.consolidateMovilidadComments(r)).length;
       const results = engine.processAll(files.movilidad.data, files.terreno.data, fechaInicio, fechaFin);
       
       const movFinal = results.filter(r => r.fuente_principal === 'movilidad').length;
       const terFinal = results.filter(r => r.fuente_principal === 'terreno').length;
 
-      setProgress(90);
-      setStatusMessage(`Resultados: Movilidad (${files.movilidad.data.length} total -> ${movWithComments} con comentarios -> ${movFinal} en fecha) | Terreno (${files.terreno.data.length} total -> ${terFinal} en fecha).`);
+      console.log('Resultados obtenidos:', results.length);
+      
+      setProgress(95);
+      setStatusMessage(`¡Éxito! Movilidad: ${movFinal} | Terreno: ${terFinal}.`);
       
       if (results.length === 0) {
-        setStatusMessage('ADVERTENCIA: No se encontraron registros que cumplan las condiciones.');
+        setStatusMessage('Atención: No se encontraron registros con las condiciones actuales (Causal + Fecha).');
       }
       
       setResultados(results);
       setProgress(100);
-      setProcessing(false);
+      
+      // Delay final para ver el éxito antes de cerrar el loader
+      setTimeout(() => setProcessing(false), 1000);
     } catch (err: any) {
-      console.error('Error en procesamiento:', err);
-      setStatusMessage(`ERROR CRÍTICO: ${err.message || 'Error desconocido'}`);
+      console.error('ERROR CRÍTICO EN PROCESAMIENTO:', err);
+      setStatusMessage(`ERROR: ${err.message || 'Error inesperado'}`);
       setProcessing(false);
-      alert(`Ocurrió un error: ${err.message}`);
+      alert(`⚠️ Error al iniciar la validación:\n${err.message || 'Consulte la consola para más detalles.'}`);
     }
   };
 
