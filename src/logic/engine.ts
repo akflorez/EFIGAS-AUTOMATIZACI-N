@@ -6,7 +6,6 @@ import type {
 export class ProcessingEngine {
   private baseGeneral: Map<string, BaseGeneralRaw> = new Map();
   private movCausalToPerfilMap: Map<string, string> = new Map();
-  private terMotivoToPerfilMap: Map<string, string> = new Map();
   private terMotivoToCVSMap: Map<string, string> = new Map();
   private terMotivoToCodeMap: Map<string, string> = new Map();
   private colIndexCedula: number = 14;   // Default O (14)
@@ -273,8 +272,6 @@ export class ProcessingEngine {
 
   public processAll(movilidadData: any[], terrenoData: any[], start?: string, end?: string): RegistroNormalizado[] {
     const resultsMap = new Map<string, RegistroNormalizado>();
-    
-    // Función para añadir/actualizar registro (Deduplicación por Producto)
     const addOrUpdate = (nuevo: RegistroNormalizado) => {
       if (!nuevo.producto || nuevo.producto === '0') return;
       const exist = resultsMap.get(nuevo.producto);
@@ -287,7 +284,6 @@ export class ProcessingEngine {
       if (!row) return;
       const product = (this.getFieldValue(row, ["Producto", "CUENTA"]) || '').toString().trim().replace(/\.0$/, '');
       const date = this.extractDateFromRow(row);
-      // SEGURIDAD: Solo si tiene Producto Y Fecha Y alguna gestión
       if (!product || product === '0' || !date) return;
       if (start && date < start) return;
       if (end && date > end) return;
@@ -298,7 +294,6 @@ export class ProcessingEngine {
       if (!row) return;
       const product = (this.getFieldValue(row, ["PRODUCTO", "CUENTA"]) || '').toString().trim().replace(/\.0$/, '');
       const date = this.extractDateFromRow(row);
-      // SEGURIDAD: Solo si tiene Producto Y Fecha Y alguna gestión
       if (!product || product === '0' || !date) return;
       if (start && date < start) return;
       if (end && date > end) return;
