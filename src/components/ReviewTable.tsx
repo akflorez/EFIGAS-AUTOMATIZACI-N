@@ -38,6 +38,7 @@ export default function ReviewTable({ data, onUpdate }: Props) {
           <thead>
             <tr className="bg-slate-50/50 border-b border-slate-100">
               <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Estado</th>
+              <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Diagnóstico</th>
               <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Identificación</th>
               <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Cliente & Dirección</th>
               <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-slate-400">Motivo Original</th>
@@ -52,6 +53,18 @@ export default function ReviewTable({ data, onUpdate }: Props) {
               <tr key={reg.id_sistema} className="hover:bg-slate-50/50 transition-colors group">
                 <td className="px-6 py-5">
                   <StatusBadge status={reg.estado_homologacion} />
+                </td>
+                <td className="px-6 py-5">
+                  {reg.motivo_error ? (
+                    <div className="flex items-center gap-1.5 text-[10px] font-bold text-red-500 bg-red-50 px-2 py-1 rounded-lg border border-red-100">
+                      <AlertTriangle size={12} />
+                      {reg.motivo_error}
+                    </div>
+                  ) : (
+                    <div className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-100">
+                      Sin observaciones
+                    </div>
+                  )}
                 </td>
                 <td className="px-6 py-5">
                   <div className="flex flex-col gap-1">

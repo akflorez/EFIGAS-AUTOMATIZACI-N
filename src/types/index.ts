@@ -77,4 +77,5 @@ export interface RegistroNormalizado {
   telefono_maestro?: string;
   // Campos auxiliares para rastro
   comentarios_concatenados?: string;
+  motivo_error?: string;
 }

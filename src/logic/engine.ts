@@ -296,6 +296,12 @@ export class ProcessingEngine {
     const cleanLabel = causalRaw.replace(idCausal, '').replace(/^[-\s]+/, '').trim().toUpperCase();
     const motivoNP = `${cleanLabel} ${mappedMotCode}`.trim().toUpperCase();
 
+    let error = '';
+    if (!product) error = 'Producto/Cuenta vacío en archivo. ';
+    if (!base) error += 'Producto no existe en Base General. ';
+    if (!causalRaw && !comments) error += 'Columnas de Motivo/Causal no encontradas o vacías. ';
+    if (perfil === 'REVISIÓN MANUAL') error += 'Causal no mapeada en Maestro. ';
+
     return {
       id_sistema: `MOV-${product}-${Date.now()}`,
       contrato: (base ? base[this.colIndexContrato] : '').toString(),
@@ -306,7 +312,7 @@ export class ProcessingEngine {
       codigo_causal: mappedMotCode, // CORRECCIÓN: Usar código de no pago
       tipo_comentario: '',
       codigo_tipo_comentario: '',
-      motivo_no_pago_original: comments,
+      motivo_no_pago_original: causalRaw || comments || '',
       motivo_no_pago_consolidado: motivoNP,
       fecha_gestion: this.extractDateFromRow(row) || '',
       estado_cruce: 'automatico',
@@ -317,7 +323,8 @@ export class ProcessingEngine {
       perfil_maestro: perfil,
       cedula_maestra: (base ? base[this.colIndexCedula] : '').toString(),
       telefono_maestro: (this.getFieldValue(row, ["celular de la persona que atendió", "Celular de persona que atendió", "celular persona que atendio", "Celular de la persona que atendio", "celular personal", "celular_personal", "numero marca", "numero de celular", "celular", "telefono", "numero contacto", "telefono nuevo para el cvs"]) || '').toString(),
-      comentarios_concatenados: comments
+      comentarios_concatenados: comments,
+      motivo_error: error.trim()
     };
   }
 
@@ -355,6 +362,12 @@ export class ProcessingEngine {
     const cleanLabel = motivoNP.replace(codeM, '').replace(/^[-\s]+/, '').trim().toUpperCase();
     const motivoCVS = `${cleanLabel} ${mappedMotCode}`.trim().toUpperCase();
 
+    let error = '';
+    if (!product) error = 'Producto/Cuenta vacío en archivo. ';
+    if (!base) error += 'Producto no existe en Base General. ';
+    if (!motivoNP) error += 'Columna de Motivo No Pago no encontrada o vacía. ';
+    if (perfil === 'REVISIÓN MANUAL') error += 'Causal no mapeada en Maestro. ';
+
     return {
       id_sistema: `TER-${product}-${Date.now()}`,
       contrato: (base ? base[this.colIndexContrato] : (this.getFieldValue(row, ["CONTRATO"]) || '')).toString(),
@@ -376,7 +389,8 @@ export class ProcessingEngine {
       fuente_principal: 'terreno',
       identificacion_valida: !!base,
       perfil_maestro: perfil,
-      comentarios_concatenados: observacion
+      comentarios_concatenados: observacion,
+      motivo_error: error.trim()
     };
   }
 
@@ -411,6 +425,7 @@ export class ProcessingEngine {
       'numeromarcado': r.telefono_maestro || '',
       'identificacion': r.cedula_maestra || '',
       'cuenta': r.producto || '',
+      'error_detalle': r.motivo_error || 'SIN ERRORES',
       'valorprome': '',
       'fechaprome': '',
       'cuota': ''
