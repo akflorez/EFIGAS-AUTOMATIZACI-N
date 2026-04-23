@@ -6,9 +6,10 @@ import ReviewTable from '../components/ReviewTable';
 import { ReportEngine } from '../logic/reportEngine';
 import { LegalizationEngine } from '../logic/legalizationEngine';
 import { 
-  FileCheck, 
-  ChevronRight, LogOut,
-  User as UserIcon,
+  FileCheck, AlertCircle, Play, Download, 
+  Settings, Database, ClipboardList,
+  LogOut, ChevronRight,
+  Layers, User as UserIcon, Calendar,
   CircleDollarSign, Map
 } from 'lucide-react';
 
@@ -44,18 +45,19 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   });
 
   const [processing, setProcessing] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState('');
   const [resultados, setResultados] = useState<RegistroNormalizado[]>([]);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [selectedLegalizationTipo, setSelectedLegalizationTipo] = useState<string[]>(['1367']);
 
-  const handleFileUpload = async (e: ChangeEvent<HTMLInputElement>, type: 'movilidad' | 'terreno' | 'master' | 'maestro') => {
+  const handleFileUpload = async (e: ChangeEvent<HTMLInputElement>, type: keyof DashboardFiles) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setFiles((prev: DashboardFiles) => ({
+    setFiles(prev => ({
       ...prev,
-      [type]: { ...prev[type], name: file.name, loaded: false, error: 'Leyendo...' }
+      [type]: { ...prev[type], name: file.name, loaded: false, error: 'Leyendo archivo...' }
     }));
 
     try {
@@ -65,162 +67,220 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         setTimeout(() => {
           try {
             const wb = XLSX.read(bstr, { type: 'binary' });
+            
             if (type === 'master') {
-              const sheetNames = wb.SheetNames;
-              const convSheetName = sheetNames.find(n => n.toUpperCase().includes('CONV'));
-              const baseSheetName = sheetNames.find(n => n.toUpperCase().includes('BASE GENERAL'));
-              if (!convSheetName || !baseSheetName) throw new Error('Master incompleto');
-              setFiles((prev: DashboardFiles) => ({
+              const convSheet = wb.SheetNames.find(n => n.toUpperCase().includes('CONV'));
+              const baseSheet = wb.SheetNames.find(n => n.toUpperCase().includes('BASE GENERAL'));
+              if (!convSheet || !baseSheet) throw new Error('Cargue el Master oficial');
+              setFiles(prev => ({
                 ...prev,
-                master: { loaded: true, name: file.name, data: XLSX.utils.sheet_to_json(wb.Sheets[convSheetName]), secondaryData: XLSX.utils.sheet_to_json(wb.Sheets[baseSheetName], { header: 1 }), error: undefined }
+                master: { loaded: true, name: file.name, data: XLSX.utils.sheet_to_json(wb.Sheets[convSheet]), secondaryData: XLSX.utils.sheet_to_json(wb.Sheets[baseSheet], { header: 1 }), error: undefined }
               }));
-            } else if (type === 'terreno' || type === 'movilidad') {
+            } else {
               let data: any[] = [];
               for (const sName of wb.SheetNames) {
                 const tempData = XLSX.utils.sheet_to_json(wb.Sheets[sName]);
                 if (tempData.length > 0) { data = tempData; break; }
               }
-              setFiles((prev: DashboardFiles) => ({ ...prev, [type]: { loaded: true, name: file.name, data, error: undefined } }));
-            } else if (type === 'maestro') {
-              setFiles((prev: DashboardFiles) => ({ ...prev, maestro: { loaded: true, name: file.name, data: XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]]), error: undefined } }));
+              setFiles(prev => ({ ...prev, [type]: { loaded: true, name: file.name, data, error: undefined } }));
             }
-          } catch (e: any) { alert(e.message); }
+          } catch (err: any) {
+            setFiles(prev => ({ ...prev, [type]: { ...prev[type], error: err.message || 'Error Excel' } }));
+          }
         }, 100);
       };
       reader.readAsBinaryString(file);
-    } catch (err) { console.error(err); }
+    } catch (e) {
+      setFiles(prev => ({ ...prev, [type]: { ...prev[type], error: 'Error de lectura' } }));
+    }
   };
 
   const processData = async () => {
-    if (!files.movilidad.loaded || !files.terreno.loaded || !files.master.loaded) return alert('Suba los archivos');
-    setResultados([]); setProcessing(true); setStatusMessage('Motor v46.10.3...');
+    if (!files.movilidad.loaded || !files.terreno.loaded || !files.master.loaded) {
+      alert('⚠️ Faltan archivos requeridos para el cruce.');
+      return;
+    }
+    setResultados([]); setProcessing(true); setProgress(5); setStatusMessage('Motor v46.10.4 Active...');
     try {
       const engine = new ProcessingEngine();
       if (files.maestro.loaded) engine.indexMasters(files.maestro.data);
-      await engine.indexBaseGeneral(files.master.secondaryData as any[], () => {});
+      await engine.indexBaseGeneral(files.master.secondaryData as any[], (p) => setProgress(10 + Math.floor(p * 0.20)));
       const results = engine.processAll(files.movilidad.data, files.terreno.data, fechaInicio, fechaFin);
-      setResultados(results); setStatusMessage('¡Completado!');
+      setResultados(results);
+      setStatusMessage(results.length > 0 ? `¡Éxito! ${results.length} coincidencias.` : 'Sin resultados según filtros.');
+      setProgress(100);
       setTimeout(() => setProcessing(false), 1000);
-    } catch (err: any) { alert(err.message); setProcessing(false); }
+    } catch (e: any) {
+      alert(e.message); setProcessing(false);
+    }
   };
 
-  const removeFile = (type: 'movilidad' | 'terreno' | 'master' | 'maestro') => {
-    setFiles((prev: DashboardFiles) => ({ ...prev, [type]: { loaded: false, name: '', data: [], secondaryData: type === 'master' ? [] : undefined } }));
-  };
-
-  const updateRegistro = (id: string, updates: Partial<RegistroNormalizado>) => {
-    setResultados((prev: RegistroNormalizado[]) => prev.map(r => r.id_sistema === id ? { ...r, ...updates } : r));
+  const removeFile = (type: keyof DashboardFiles) => {
+    setFiles(prev => ({ ...prev, [type]: { loaded: false, name: '', data: [], secondaryData: type === 'master' ? [] : undefined } }));
   };
 
   const exportCSV = () => {
     if (!resultados.length) return;
     const ws = XLSX.utils.json_to_sheet(new ProcessingEngine().createExportData(resultados));
-    const blob = new Blob(["\uFEFF" + XLSX.utils.sheet_to_csv(ws, { FS: ";" })], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a"); link.href = url; link.download = `visitas.csv`; link.click();
+    const csv = XLSX.utils.sheet_to_csv(ws, { FS: ";" });
+    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = 'visitas_efigas.csv'; link.click();
   };
 
   return (
-    <div className="flex min-h-screen bg-slate-50 font-sans">
-      {processing && activeTab === 'reporte' && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center">
-           <div className="bg-white p-12 rounded-3xl text-center">
-              <div className="w-10 h-10 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
-              <h3 className="text-xl font-black">Generando Reporte</h3>
-              <p className="text-emerald-600 font-bold uppercase">{statusMessage}</p>
-           </div>
+    <div className="flex min-h-screen bg-[#f8fafc] font-sans text-slate-900">
+      {/* Sidebar Premium */}
+      <aside className={`${isSidebarCollapsed ? 'w-20' : 'w-72'} bg-[#0f172a] text-white flex flex-col p-6 fixed h-full z-20 shadow-2xl transition-all duration-300 border-r border-white/5`}>
+        <div className="mb-10 px-2 flex items-center justify-between">
+          {!isSidebarCollapsed && (
+             <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20"><Layers className="text-slate-900" size={24} /></div>
+                <div><h1 className="text-xl font-black tracking-tighter">EMDECOB</h1><p className="text-[10px] text-emerald-400 font-black uppercase tracking-widest leading-none">Automación</p></div>
+             </div>
+          )}
+          <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="p-2 hover:bg-white/10 rounded-lg text-white/50"><ChevronRight className={isSidebarCollapsed ? '' : 'rotate-180'} /></button>
         </div>
-      )}
 
-      <aside className={`${isSidebarCollapsed ? 'w-20' : 'w-72'} bg-[#0a1118] text-white flex flex-col p-6 fixed h-full z-20 transition-all`}>
-        <div className="mb-12 flex justify-between items-center text-xl font-black uppercase tracking-tighter">
-          {!isSidebarCollapsed && 'EMDECOB'}
-          <button onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)} className="p-2 text-white/50"><ChevronRight className={isSidebarCollapsed ? '' : 'rotate-180'} /></button>
-        </div>
         <nav className="flex-1 space-y-2">
-          <NavItem active={activeTab === 'procesar'} onClick={() => setActiveTab('procesar')} icon={<Map size={20} />} label="Visitas" collapsed={isSidebarCollapsed} />
-          <NavItem active={activeTab === 'reporte'} onClick={() => setActiveTab('reporte')} icon={<FileCheck size={20} />} label="Reportes" collapsed={isSidebarCollapsed} />
-          <NavItem active={activeTab === 'legalizacion'} onClick={() => setActiveTab('legalizacion')} icon={<CircleDollarSign size={20} />} label="Finanzas" collapsed={isSidebarCollapsed} />
+          {!isSidebarCollapsed && <p className="px-4 text-[10px] font-black text-white/30 uppercase tracking-widest mb-4">Herramientas</p>}
+          <NavItem active={activeTab === 'procesar'} onClick={() => setActiveTab('procesar')} icon={<Map size={20} />} label="Visitas Terreno" collapsed={isSidebarCollapsed} />
+          <NavItem active={activeTab === 'reporte'} onClick={() => setActiveTab('reporte')} icon={<FileCheck size={20} />} label="Informe Gestión" collapsed={isSidebarCollapsed} />
+          <NavItem active={activeTab === 'legalizacion'} onClick={() => setActiveTab('legalizacion'} icon={<CircleDollarSign size={20} />} label="Legalizaciones" collapsed={isSidebarCollapsed} />
         </nav>
+
         <div className="mt-auto pt-6 border-t border-white/5">
-          <button onClick={onLogout} className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:text-white w-full"><LogOut size={20} /> {!isSidebarCollapsed && 'Cerrar Sesión'}</button>
+           <button onClick={onLogout} className="flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-white/5 hover:text-white transition-all w-full"><LogOut size={20} /> {!isSidebarCollapsed && <span className="font-bold text-sm">Cerrar Sesión</span>}</button>
         </div>
       </aside>
 
-      <main className={`flex-1 ${isSidebarCollapsed ? 'ml-20' : 'ml-72'} p-10 transition-all`}>
-        <header className="flex justify-between items-center mb-10 text-slate-800">
-          <div><h2 className="text-3xl font-black">Efigas v46.10.3</h2><p className="text-emerald-600 font-bold uppercase text-xs">Motor Selectivo</p></div>
-          <div className="flex items-center gap-3 border rounded-2xl p-2 px-4 bg-white"><UserIcon size={20} /> <span className="font-bold">Efigas User</span></div>
+      <main className={`flex-1 ${isSidebarCollapsed ? 'ml-20' : 'ml-72'} p-10 transition-all duration-300`}>
+        <header className="flex justify-between items-center mb-10">
+          <div><h2 className="text-3xl font-black text-slate-900 tracking-tight">Efigas Dashboard v46.10.4</h2><p className="text-emerald-600 font-bold text-sm">Motor Lógica Selectiva Activo</p></div>
+          <div className="flex items-center gap-4 bg-white p-2 pr-5 rounded-2xl shadow-sm border border-slate-100">
+             <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-500"><UserIcon size={20} /></div>
+             <div className="leading-none text-left"><p className="text-[10px] font-black text-slate-400 uppercase mb-1">Operador Senior</p><p className="text-sm font-black text-slate-800">Efigas User</p></div>
+          </div>
         </header>
 
         {activeTab === 'procesar' ? (
-          <div className="space-y-8">
-            <div className="bg-white border rounded-3xl p-6">
-                <p className="text-[10px] font-black text-emerald-600 uppercase mb-4">Filtro Terreno (Timestamp)</p>
-                <div className="flex gap-6">
-                  <input type="date" value={fechaInicio} className="border rounded-xl px-4 py-3 w-full" onChange={(e: any) => setFechaInicio(e.target.value)} />
-                  <input type="date" value={fechaFin} className="border rounded-xl px-4 py-3 w-full" onChange={(e: any) => setFechaFin(e.target.value)} />
+          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
+                <div className="flex items-center gap-3 mb-6"><div className="w-8 h-8 bg-emerald-50 rounded-lg flex items-center justify-center text-emerald-600"><Calendar size={18} /></div><h4 className="text-sm font-black text-slate-700 uppercase tracking-tight">Filtro Terreno (Solo Campo Timestamp)</h4></div>
+                <div className="flex flex-col md:flex-row gap-6">
+                  <div className="flex-1"><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Fecha Inicio</label><input type="date" value={fechaInicio} className="w-full border-2 border-slate-100 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none transition-all" onChange={(e) => setFechaInicio(e.target.value)} /></div>
+                  <div className="flex-1"><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Fecha Fin</label><input type="date" value={fechaFin} className="w-full border-2 border-slate-100 rounded-xl px-4 py-3 text-sm focus:border-emerald-500 outline-none transition-all" onChange={(e) => setFechaFin(e.target.value)} /></div>
                 </div>
             </div>
-            <div className="grid grid-cols-4 gap-6">
-               <FileCard title="Movilidad" status={files.movilidad} onUpload={(e: any) => handleFileUpload(e, 'movilidad')} onRemove={() => removeFile('movilidad')} accent="blue" />
-               <FileCard title="Terreno" status={files.terreno} onUpload={(e: any) => handleFileUpload(e, 'terreno')} onRemove={() => removeFile('terreno')} accent="green" />
-               <FileCard title="Master" status={files.master} onUpload={(e: any) => handleFileUpload(e, 'master')} onRemove={() => removeFile('master')} accent="amber" />
-               <FileCard title="Maestro" status={files.maestro} onUpload={(e: any) => handleFileUpload(e, 'maestro')} onRemove={() => removeFile('maestro')} accent="slate" />
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+               <FileCard title="Movilidad (Libro)" icon={<Database size={24} />} status={files.movilidad} onUpload={(e) => handleFileUpload(e, 'movilidad')} onRemove={() => removeFile('movilidad')} accent="blue" />
+               <FileCard title="Gestión Terreno" icon={<ClipboardList size={24} />} status={files.terreno} onUpload={(e) => handleFileUpload(e, 'terreno')} onRemove={() => removeFile('terreno')} accent="emerald" />
+               <FileCard title="Seguimiento (Master)" icon={<AlertCircle size={24} />} status={files.master} onUpload={(e) => handleFileUpload(e, 'master')} onRemove={() => removeFile('master')} accent="amber" />
+               <FileCard title="Homologaciones" icon={<Settings size={24} />} status={files.maestro} onUpload={(e) => handleFileUpload(e, 'maestro')} onRemove={() => removeFile('maestro')} accent="slate" />
             </div>
-            <section className="bg-white p-12 text-center rounded-3xl border">
+
+            <section className="bg-white border-2 border-dashed border-slate-200 rounded-[2.5rem] p-12 text-center relative overflow-hidden">
                {!resultados.length ? (
-                 <div className="max-w-xl mx-auto">
-                    {processing ? <div className="animate-spin w-10 h-10 border-4 border-emerald-500 rounded-full mx-auto"></div> : <button onClick={processData} className="btn-premium px-12 py-5 text-xl">Iniciar Validación</button>}
-                 </div>
+                  <div className="max-w-xl mx-auto">
+                    {processing ? (
+                      <div className="space-y-6">
+                         <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                         <h3 className="text-xl font-bold">{statusMessage}</h3>
+                         <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden"><div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${progress}%` }}></div></div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="w-20 h-20 bg-emerald-50 rounded-3xl flex items-center justify-center mx-auto mb-6 text-emerald-600 shadow-inner"><Play size={32} /></div>
+                        <h3 className="text-2xl font-black mb-4">Validación Cruzada v46.10.4</h3>
+                        <p className="text-slate-500 mb-8 font-medium leading-relaxed">Se aplicará la lógica selectiva: Movilidad total y Terreno filtrado por Timestamp.</p>
+                        {statusMessage.includes('Diagnóstico') && (
+                          <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl mb-6 text-amber-800 text-xs font-bold text-left">{statusMessage}</div>
+                        )}
+                        <button onClick={processData} className="px-12 py-5 bg-emerald-500 text-slate-900 font-black rounded-2xl shadow-xl shadow-emerald-500/30 hover:scale-105 transition-all text-xl">Iniciar Procesamiento</button>
+                      </>
+                    )}
+                  </div>
                ) : (
-                 <div className="text-left">
-                    <div className="flex justify-between items-center mb-8">
-                       <div className="flex gap-10">
-                          <KPI label="Total" value={resultados.length} />
-                          <KPI label="Validados" value={resultados.filter(r => r.identificacion_valida).length} color="text-emerald-500" />
-                       </div>
-                       <button onClick={exportCSV} className="btn-premium px-8">Exportar CSV</button>
-                    </div>
-                    <ReviewTable data={resultados} onUpdate={updateRegistro} />
-                 </div>
+                  <div className="text-left w-full animate-in fade-in duration-700">
+                     <div className="flex justify-between items-end mb-10">
+                        <div className="flex gap-12">
+                           <KPI label="Total Final" value={resultados.length} />
+                           <KPI label="Válidos (Maestra)" value={resultados.filter(r => r.identificacion_valida).length} color="text-emerald-500" />
+                           <KPI label="Movilidad" value={resultados.filter(r => r.fuente_principal === 'movilidad').length} color="text-blue-500" />
+                        </div>
+                        <div className="flex gap-4">
+                           <button onClick={processData} className="px-6 py-4 border-2 border-slate-100 rounded-xl font-bold hover:bg-slate-50 transition-all">Re-procesar</button>
+                           <button onClick={exportCSV} className="px-8 py-4 bg-slate-900 text-white font-black rounded-2xl shadow-xl hover:bg-slate-800 transition-all flex items-center gap-3"><Download size={20} /> Exportar CSV</button>
+                        </div>
+                     </div>
+                     <ReviewTable data={resultados} onUpdate={(id, updates) => setResultados(prev => prev.map(r => r.id_sistema === id ? { ...r, ...updates } : r))} />
+                  </div>
                )}
             </section>
           </div>
         ) : activeTab === 'reporte' ? (
-          <div className="bg-white border rounded-3xl p-10">
-             <h3 className="text-2xl font-black mb-8">Informe de Gestión</h3>
-             <FileCard title="Master" status={files.master} onUpload={(e: any) => handleFileUpload(e, 'master')} onRemove={() => removeFile('master')} accent="amber" />
-             <div className="mt-8 bg-slate-900 p-10 rounded-3xl text-white flex justify-between items-center">
-                <div><h4 className="text-xl font-black underline decoration-emerald-500">¿Descargar Reporte?</h4><p className="text-slate-400 text-sm">Usa los datos del Master cargado arriba.</p></div>
-                <button onClick={async () => {
-                   if (!files.master.loaded) return alert('Sube el Master');
-                   try {
-                      setProcessing(true);
-                      const result = await new ReportEngine().generateReport(files.master.secondaryData || [], files.master.data || [], '/templates/plantilla_gestion.xlsx');
-                      const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([result.excelBuffer])); link.download = 'REPORTE.xlsx'; link.click();
-                      setProcessing(false);
-                   } catch(e) { setProcessing(false); }
-                }} className="btn-premium px-12 py-5 text-xl">Ejecutar Ahora</button>
+          <div className="space-y-8 animate-in slide-in-from-right-4 duration-500">
+             <div className="bg-white border border-slate-200 rounded-3xl p-10 shadow-sm">
+                <div className="flex items-center gap-4 mb-8">
+                   <div className="w-16 h-16 bg-emerald-500 rounded-2xl flex items-center justify-center text-slate-900"><FileCheck size={32} /></div>
+                   <div><h3 className="text-2xl font-black">Informe de Gestión de Causales</h3><p className="text-slate-500 font-medium font-medium">Generación autónoma desde archivo Master.</p></div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
+                   <FileCard title="Archivo Master" icon={<Database size={24} />} status={files.master} onUpload={(e) => handleFileUpload(e, 'master')} onRemove={() => removeFile('master')} accent="amber" />
+                   <div className="p-8 rounded-3xl border-2 border-slate-50 bg-[#fafafa] flex items-center justify-center text-center"><p className="text-sm font-bold text-slate-400">Plantilla Oficial EMDECOB Cargada.<br/>Lista para inyectar datos.</p></div>
+                </div>
+                <div className="bg-[#0f172a] rounded-[2.5rem] p-10 text-white flex justify-between items-center shadow-2xl">
+                   <div><h4 className="text-2xl font-black mb-2">Procesar Reporte</h4><p className="text-slate-400 font-medium">Utiliza el archivo Master para llenar todas las pestañas.</p></div>
+                   <button 
+                     onClick={async () => {
+                       if (!files.master.loaded) return alert('Carga el Master');
+                       setProcessing(true); setStatusMessage('Generando Informe Oficial...');
+                       try {
+                         const result = await new ReportEngine().generateReport(files.master.secondaryData || [], files.master.data || [], '/templates/plantilla_gestion.xlsx');
+                         const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([result.excelBuffer])); link.download = `INFORME_GESTION_${new Date().toISOString().split('T')[0]}.xlsx`; link.click();
+                         setStatusMessage('¡Informe Generado!'); setProgress(100);
+                         setTimeout(() => setProcessing(false), 2000);
+                       } catch(e) { alert('Error al generar'); setProcessing(false); }
+                     }}
+                     className="px-12 py-5 bg-emerald-500 text-slate-900 font-black rounded-2xl shadow-xl hover:scale-105 transition-all text-xl"
+                   >Descargar Excel Oficial</button>
+                </div>
              </div>
+             {processing && activeTab === 'reporte' && (
+                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[100] flex items-center justify-center animate-in fade-in duration-300">
+                   <div className="bg-white p-12 rounded-[3rem] shadow-2xl max-w-lg w-full text-center">
+                      <div className="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto mb-6"></div>
+                      <h3 className="text-2xl font-black mb-2">Creando Libro Oficial</h3>
+                      <p className="text-emerald-600 font-bold uppercase tracking-tight">{statusMessage}</p>
+                   </div>
+                </div>
+             )}
           </div>
         ) : (
-          <div className="bg-white p-10 rounded-3xl border">
-             <h3 className="text-2xl font-black mb-8">Finanzas & Legalización</h3>
-             <div className="grid grid-cols-4 gap-4 mb-8">
-               {['1367', '1368', '1369', 'TODOS'].map(t => <button key={t} onClick={() => setSelectedLegalizationTipo(t === 'TODOS' ? ['1367', '1368', '1369'] : [t])} className={`p-4 rounded-xl font-bold border ${selectedLegalizationTipo.includes(t) ? 'bg-amber-500 text-white' : 'bg-slate-50'}`}>{t}</button>)}
+          <div className="max-w-4xl mx-auto space-y-8 animate-in slide-in-from-right-4 duration-500">
+             <div className="bg-white p-10 rounded-[2.5rem] shadow-sm border border-slate-200">
+                <div className="flex items-center gap-4 mb-10"><div className="w-12 h-12 bg-amber-500 rounded-2xl flex items-center justify-center text-slate-900"><CircleDollarSign size={24} /></div><h3 className="text-2xl font-black">Módulo de Legalizaciones</h3></div>
+                <div className="grid grid-cols-4 gap-4 mb-10">
+                   {['1367', '1368', '1369', 'TODOS'].map(t => (
+                     <button key={t} onClick={() => setSelectedLegalizationTipo(t === 'TODOS' ? ['1367', '1368', '1369'] : [t])} className={`p-5 rounded-2xl font-black transition-all border-2 ${selectedLegalizationTipo.includes(t) || (t === 'TODOS' && selectedLegalizationTipo.length === 3) ? 'bg-amber-500 border-amber-600 text-slate-900 shadow-lg shadow-amber-500/20' : 'bg-slate-50 border-slate-100 text-slate-400 hover:bg-slate-100'}`}>{t}</button>
+                   ))}
+                </div>
+                <FileCard title="Base General (Master)" icon={<Database size={24} />} status={files.master} onUpload={(e) => handleFileUpload(e, 'master')} onRemove={() => removeFile('master')} accent="amber" />
+                <button 
+                  onClick={async () => {
+                    if (!files.master.loaded) return alert('Suba la base general');
+                    setProcessing(true); setStatusMessage('Creando Legalización...');
+                    try {
+                       const res = await fetch('/templates/Plantilla_Legalizacion_masiva.xls');
+                       const buffer = await res.arrayBuffer();
+                       const result = await new LegalizationEngine().processLegalization(files.master.secondaryData || [], selectedLegalizationTipo, buffer);
+                       const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([result.excelBuffer])); link.download = `LEGALIZACION_${selectedLegalizationTipo.join('_')}.xlsx`; link.click();
+                       setProcessing(false);
+                    } catch(e) { alert('Error'); setProcessing(false); }
+                  }}
+                  className="w-full mt-10 py-6 bg-slate-900 text-white font-black rounded-3xl hover:bg-slate-800 transition-all shadow-2xl text-xl"
+                >Procesar Descarga Masiva</button>
              </div>
-             <FileCard title="Base" status={files.master} onUpload={(e: any) => handleFileUpload(e, 'master')} onRemove={() => removeFile('master')} accent="amber" />
-             <button onClick={async () => {
-                if (!files.master.loaded) return alert('Suba la base');
-                setProcessing(true);
-                try {
-                   const res = await fetch('/templates/Plantilla_Legalizacion_masiva.xls');
-                   const result = await new LegalizationEngine().processLegalization(files.master.secondaryData || [], selectedLegalizationTipo, await res.arrayBuffer());
-                   const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([result.excelBuffer])); link.download = 'LEGALIZACION.xlsx'; link.click();
-                   setProcessing(false);
-                } catch(e) { setProcessing(false); }
-             }} className="w-full mt-8 py-5 bg-slate-900 text-white font-black rounded-2xl">Descargar Legalización</button>
           </div>
         )}
       </main>
@@ -230,25 +290,30 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
 function NavItem({ active, onClick, icon, label, collapsed }: { active: boolean, onClick: () => void, icon: ReactNode, label: string, collapsed: boolean }) {
   return (
-    <div onClick={onClick} className={`flex items-center gap-4 px-4 py-3 rounded-xl cursor-pointer transition-all ${active ? 'bg-emerald-500 text-white' : 'text-slate-400 hover:text-white'}`}>
-      {icon} {!collapsed && <span className="font-bold text-sm tracking-tight">{label}</span>}
+    <div onClick={onClick} className={`flex items-center gap-4 px-4 py-3 rounded-xl cursor-pointer transition-all duration-300 ${active ? 'bg-emerald-500 text-slate-900 font-black shadow-xl shadow-emerald-500/20 scale-[1.02]' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
+      {icon} {!collapsed && <span className="text-sm tracking-tight">{label}</span>}
     </div>
   );
 }
 
-function FileCard({ title, status, onUpload, onRemove, accent }: any) {
+function FileCard({ title, icon, status, onUpload, onRemove, accent }: { title: string, icon: ReactNode, status: FileStatus, onUpload: (e: any) => void, onRemove: () => void, accent: string }) {
+  const bg = accent === 'blue' ? 'bg-blue-50 text-blue-500' : accent === 'emerald' ? 'bg-emerald-50 text-emerald-500' : accent === 'amber' ? 'bg-amber-50 text-amber-500' : 'bg-slate-100 text-slate-500';
   return (
-    <div className={`bg-white p-6 rounded-3xl border ${status.loaded ? 'ring-2 ring-emerald-500 border-transparent shadow-lg' : 'border-slate-100'}`}>
-       <div className={`w-2 h-2 rounded-full mb-4 ${accent === 'blue' ? 'bg-blue-500' : accent === 'green' ? 'bg-emerald-500' : 'bg-amber-500'}`}></div>
+    <div className={`bg-white p-6 rounded-3xl border border-slate-100 shadow-sm transition-all hover:shadow-md ${status.loaded ? 'ring-2 ring-emerald-500/20 bg-emerald-50/10' : ''}`}>
+       <div className={`w-12 h-12 ${bg} rounded-2xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110`}>{icon}</div>
        <h4 className="font-black text-slate-800 text-sm mb-1">{title}</h4>
        <p className="text-[10px] text-slate-400 font-bold uppercase mb-4 truncate">{status.loaded ? status.name : 'Pendiente'}</p>
-       {!status.loaded ? <label className="cursor-pointer"><input type="file" className="hidden" onChange={onUpload} /><div className="bg-slate-50 border py-2 rounded-xl text-center text-xs font-black text-slate-600">SUBIR</div></label> : <button onClick={onRemove} className="w-full bg-red-50 text-red-500 py-2 rounded-xl text-xs font-black">CAMBIAR</button>}
+       {!status.loaded ? (
+         <label className="cursor-pointer"><input type="file" className="hidden" onChange={onUpload} /><div className="bg-slate-50 border border-slate-200 py-2.5 rounded-xl text-center text-xs font-black text-slate-600 hover:bg-slate-100 transition-all">SUBIR ARCHIVO</div></label>
+       ) : (
+         <button onClick={onRemove} className="w-full bg-red-50 text-red-500 py-2.5 rounded-xl text-xs font-black hover:bg-red-100 transition-all">ELIMINAR</button>
+       )}
     </div>
   );
 }
 
 function KPI({ label, value, color = "text-slate-900" }: { label: string, value: number, color?: string }) {
   return (
-    <div><p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{label}</p><p className={`text-2xl font-black ${color}`}>{value}</p></div>
+    <div className="group"><p className="text-[10px] font-black text-slate-400 uppercase mb-1 tracking-widest">{label}</p><p className={`text-3xl font-black ${color} tracking-tighter`}>{value.toLocaleString()}</p></div>
   );
 }
