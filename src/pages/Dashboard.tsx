@@ -226,8 +226,8 @@ export default function Dashboard() {
       <main className={`flex-1 ${isSidebarCollapsed ? 'ml-20' : 'ml-72'} p-10 transition-all`}>
         <header className="flex justify-between items-center mb-10">
           <div>
-            <h2 className="text-3xl font-black text-slate-900">Generador v46.10.2</h2>
-            <p className="text-efigas-primary font-bold text-sm mt-1">Motor Independiente</p>
+            <h2 className="text-3xl font-black text-slate-900">Generador v46.10.3</h2>
+            <p className="text-efigas-primary font-bold text-sm mt-1">Motor con Lógica Selectiva (Movilidad Total)</p>
           </div>
           <div className="flex items-center gap-4 bg-white p-2 pr-5 rounded-2xl border">
              <UserIcon size={20} className="text-slate-600" />
@@ -238,6 +238,7 @@ export default function Dashboard() {
         {activeTab === 'procesar' ? (
           <div className="space-y-8">
             <div className="bg-white border rounded-3xl p-6">
+                <p className="text-[10px] font-black text-efigas-primary uppercase tracking-widest mb-4">Filtro de Fecha (Solo para Gestión Terreno - Campo Timestamp)</p>
                 <div className="flex flex-col md:flex-row gap-6">
                   <div className="flex-1"><label className="block text-xs font-bold uppercase mb-2">Fecha Desde</label><input type="date" value={fechaInicio} className="border rounded-xl px-4 py-3 w-full" onChange={(e: ChangeEvent<HTMLInputElement>) => setFechaInicio(e.target.value)} /></div>
                   <div className="flex-1"><label className="block text-xs font-bold uppercase mb-2">Fecha Hasta</label><input type="date" value={fechaFin} className="border rounded-xl px-4 py-3 w-full" onChange={(e: ChangeEvent<HTMLInputElement>) => setFechaFin(e.target.value)} /></div>

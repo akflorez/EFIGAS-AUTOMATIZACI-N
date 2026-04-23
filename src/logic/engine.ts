@@ -192,7 +192,7 @@ export class ProcessingEngine {
     const motivoNP = (mappedMotDescription || `${cleanLabel} ${idCausal}`).trim().toUpperCase();
 
     return {
-      id_sistema: `MOV-${product}-${date}-${Math.random()}`,
+      id_sistema: `MOV-${product}-${Math.random()}`,
       contrato: base ? this.safeString(base[this.colIndexContrato]) : '',
       producto: product,
       cliente: base ? this.safeString(base[this.colIndexNombre]) : '',
@@ -203,7 +203,7 @@ export class ProcessingEngine {
       codigo_tipo_comentario: '',
       motivo_no_pago_original: causalRaw,
       motivo_no_pago_consolidado: motivoNP,
-      fecha_gestion: date,
+      fecha_gestion: date || new Date().toISOString().split('T')[0],
       estado_cruce: 'automatico',
       estado_homologacion: perfilFromMaestro ? 'exitosa' : 'pendiente',
       editado_manualmente: false,
@@ -229,7 +229,7 @@ export class ProcessingEngine {
     this.stats.terConMotivo++;
 
     const base = this.baseGeneral.get(product);
-    const date = this.formatDate(this.getFieldValue(row, ["Fecha", "Gestionada", "Fecha Gestion"])) || '';
+    const date = this.formatDate(this.getFieldValue(row, ["Timestamp", "Fecha", "Gestionada", "Fecha Gestion"])) || '';
     const codeM = this.extractCode(motivoRaw);
     const normM = this.normalizeText(motivoRaw);
     const perfilRaw = this.movCausalToPerfilMap.get(codeM) || this.movCausalToPerfilMap.get(normM) || '';
@@ -273,16 +273,18 @@ export class ProcessingEngine {
       if (!registro) return;
       
       // LOGICA SELECTIVA:
-      // Movilidad pasa completo (siempre que tenga causal).
-      // Terreno debe cumplir estrictamente el filtro de fecha si este se selecciona.
+      // Movilidad NO se filtra por fecha (siempre entra si tiene causal).
       if (registro.fuente_principal === 'terreno' && (start || end)) {
         if (!registro.fecha_gestion) return; 
         if (start && registro.fecha_gestion < start) return;
         if (end && registro.fecha_gestion > end) return;
       }
       
-      if (registro.fuente_principal === 'movilidad') this.stats.movEnFecha++;
-      if (registro.fuente_principal === 'terreno') this.stats.terEnFecha++;
+      if (registro.fuente_principal === 'movilidad') {
+        this.stats.movEnFecha++;
+      } else if (registro.fuente_principal === 'terreno') {
+        this.stats.terEnFecha++;
+      }
       
       results.push(registro);
     };
