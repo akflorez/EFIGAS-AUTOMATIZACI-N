@@ -7,7 +7,6 @@ export class ProcessingEngine {
   private baseGeneral: Map<string, BaseGeneralRaw> = new Map();
   private movCausalToPerfilMap: Map<string, string> = new Map();
   private terMotivoToCVSMap: Map<string, string> = new Map();
-  private terMotivoToCodeMap: Map<string, string> = new Map();
   private colIndexCedula: number = 14;   
   private colIndexNombre: number = 2;    
   private colIndexDireccion: number = 5; 
@@ -41,11 +40,10 @@ export class ProcessingEngine {
     const total = data.length;
     let headerRowIndex = -1;
     
-    // Buscar encabezados en las primeras 20 filas
     for (let i = 0; i < Math.min(data.length, 20); i++) {
         const row = data[i];
         if (!row || !Array.isArray(row)) continue;
-        const rowStr = row.map(v => this.normalizeText(v?.toString() || ""));
+        const rowStr = (row as any[]).map(v => this.normalizeText(v?.toString() || ""));
         if (rowStr.some(v => v.includes('producto') || v.includes('contrato') || v.includes('cuenta'))) {
           headerRowIndex = i;
           rowStr.forEach((val, idx) => {
@@ -68,7 +66,7 @@ export class ProcessingEngine {
         
         let key = '';
         if (headerRowIndex !== -1) {
-          const headerRow = data[headerRowIndex] as any[];
+          const headerRow = data[headerRowIndex] as unknown as any[];
           const prodIdx = headerRow.findIndex(h => {
              const nh = this.normalizeText(h?.toString() || "");
              return nh.includes('producto') || nh.includes('cuenta') || nh.includes('contrato');
@@ -177,17 +175,17 @@ export class ProcessingEngine {
     const normCausal = this.normalizeText(causalRaw);
 
     const perfilFromMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(normCausal);
-    let perfil = (perfilFromMaestro || cleanLabel || 'REVISIÓN MANUAL').toString().replace(/\d+/g, '').replace(/^[-\s]+/, '').trim().toUpperCase();
+    const perfil = (perfilFromMaestro || cleanLabel || 'REVISIÓN MANUAL').toString().replace(/\d+/g, '').replace(/^[-\s]+/, '').trim().toUpperCase();
 
     const mappedMotDescription = this.terMotivoToCVSMap.get(idCausal) || this.terMotivoToCVSMap.get(normCausal);
     const motivoNP = (mappedMotDescription || `${cleanLabel} ${idCausal}`).trim().toUpperCase();
 
     return {
       id_sistema: `MOV-${product}-${date}-${Math.random()}`,
-      contrato: (base ? base[this.colIndexContrato] : '').toString(),
+      contrato: (base ? (base as any[])[this.colIndexContrato] : '').toString(),
       producto: product,
-      cliente: (base ? base[this.colIndexNombre] : '').toString(),
-      direccion: (base ? base[this.colIndexDireccion] : '').toString(),
+      cliente: (base ? (base as any[])[this.colIndexNombre] : '').toString(),
+      direccion: (base ? (base as any[])[this.colIndexDireccion] : '').toString(),
       causal: obsLarga || cleanLabel,
       codigo_causal: idCausal,
       tipo_comentario: '',
@@ -201,7 +199,7 @@ export class ProcessingEngine {
       fuente_principal: 'movilidad',
       identificacion_valida: !!base,
       perfil_maestro: perfil,
-      cedula_maestra: (base ? base[this.colIndexCedula] : '').toString(),
+      cedula_maestra: (base ? (base as any[])[this.colIndexCedula] : '').toString(),
       telefono_maestro: (this.getFieldValue(row, ["celular", "telefono"]) || '').toString(),
       comentarios_concatenados: obsLarga,
       motivo_error: ''
@@ -228,11 +226,11 @@ export class ProcessingEngine {
 
     return {
       id_sistema: `TER-${product}-${date}-${Math.random()}`,
-      contrato: (base ? base[this.colIndexContrato] : '').toString(),
+      contrato: (base ? (base as any[])[this.colIndexContrato] : '').toString(),
       producto: product,
-      cliente: (base ? base[this.colIndexNombre] : '').toString(),
-      direccion: (base ? base[this.colIndexDireccion] : '').toString(),
-      cedula_maestra: (base ? base[this.colIndexCedula] : '').toString(),
+      cliente: (base ? (base as any[])[this.colIndexNombre] : '').toString(),
+      direccion: (base ? (base as any[])[this.colIndexDireccion] : '').toString(),
+      cedula_maestra: (base ? (base as any[])[this.colIndexCedula] : '').toString(),
       telefono_maestro: (this.getFieldValue(row, ["celular", "telefono"]) || '').toString(),
       causal: obs || cleanLabel,
       codigo_causal: codeM,
@@ -255,10 +253,10 @@ export class ProcessingEngine {
   public processAll(movilidadData: any[], terrenoData: any[], start?: string, end?: string): RegistroNormalizado[] {
     const results: RegistroNormalizado[] = [];
     
-    // Función auxiliar para aplicar filtros de fecha y agregar a resultados
     const processRegistry = (registro: RegistroNormalizado) => {
       if (!registro) return;
-      if ((start || end) && registro.fecha_gestion) {
+      if (start || end) {
+        if (!registro.fecha_gestion) return; 
         if (start && registro.fecha_gestion < start) return;
         if (end && registro.fecha_gestion > end) return;
       }
