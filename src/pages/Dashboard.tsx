@@ -1,7 +1,7 @@
 import { useState, type ChangeEvent, type ReactNode } from 'react';
 import * as XLSX from 'xlsx';
 import { ProcessingEngine } from '../logic/engine';
-import type { RegistroNormalizado, BaseGeneralRaw } from '../types';
+import type { RegistroNormalizado } from '../types';
 import ReviewTable from '../components/ReviewTable';
 import { ReportEngine } from '../logic/reportEngine';
 import { LegalizationEngine } from '../logic/legalizationEngine';
