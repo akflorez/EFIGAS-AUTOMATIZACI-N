@@ -245,7 +245,7 @@ export class ProcessingEngine {
       tipo_comentario: '',
       codigo_tipo_comentario: '',
       motivo_no_pago_original: motivoRaw,
-      motivo_no_pago_consolidated: motivoCVS,
+      motivo_no_pago_consolidado: motivoCVS,
       fecha_gestion: date,
       estado_cruce: 'automatico',
       estado_homologacion: perfil && perfil !== 'REVISIÓN MANUAL' ? 'exitosa' : 'pendiente',
