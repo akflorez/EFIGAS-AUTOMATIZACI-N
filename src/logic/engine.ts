@@ -4,7 +4,7 @@ import type {
 } from '../types';
 
 export class ProcessingEngine {
-  private baseGeneral: Map<string, BaseGeneralRaw> = new Map();
+  private baseGeneral: Map<string, any[]> = new Map();
   private movCausalToPerfilMap: Map<string, string> = new Map();
   private terMotivoToCVSMap: Map<string, string> = new Map();
   private colIndexCedula: number = 14;   
@@ -37,13 +37,15 @@ export class ProcessingEngine {
   public async indexBaseGeneral(data: BaseGeneralRaw[], onProgress: (p: number) => void) {
     if (!data || data.length === 0) { onProgress(100); return; }
     
-    const total = data.length;
+    // Forzamos a que trate la data como un array de arrays (header: 1 del Excel)
+    const rawData = data as unknown as any[][];
+    const total = rawData.length;
     let headerRowIndex = -1;
     
-    for (let i = 0; i < Math.min(data.length, 20); i++) {
-        const row = data[i];
+    for (let i = 0; i < Math.min(rawData.length, 20); i++) {
+        const row = rawData[i];
         if (!row || !Array.isArray(row)) continue;
-        const rowStr = (row as any[]).map(v => this.normalizeText(v?.toString() || ""));
+        const rowStr = row.map(v => this.normalizeText(v?.toString() || ""));
         if (rowStr.some(v => v.includes('producto') || v.includes('contrato') || v.includes('cuenta'))) {
           headerRowIndex = i;
           rowStr.forEach((val, idx) => {
@@ -61,13 +63,13 @@ export class ProcessingEngine {
       const end = Math.min(i + chunkSize, total);
       for (let j = i; j < end; j++) {
         if (j <= headerRowIndex) continue;
-        const row = data[j];
+        const row = rawData[j];
         if (!row || !Array.isArray(row)) continue;
         
         let key = '';
         if (headerRowIndex !== -1) {
-          const headerRow = data[headerRowIndex] as unknown as any[];
-          const prodIdx = headerRow.findIndex(h => {
+          const headerRow = rawData[headerRowIndex];
+          const prodIdx = headerRow.findIndex((h: any) => {
              const nh = this.normalizeText(h?.toString() || "");
              return nh.includes('producto') || nh.includes('cuenta') || nh.includes('contrato');
           });
@@ -182,10 +184,10 @@ export class ProcessingEngine {
 
     return {
       id_sistema: `MOV-${product}-${date}-${Math.random()}`,
-      contrato: (base ? (base as any[])[this.colIndexContrato] : '').toString(),
+      contrato: (base ? base[this.colIndexContrato] : '').toString(),
       producto: product,
-      cliente: (base ? (base as any[])[this.colIndexNombre] : '').toString(),
-      direccion: (base ? (base as any[])[this.colIndexDireccion] : '').toString(),
+      cliente: (base ? base[this.colIndexNombre] : '').toString(),
+      direccion: (base ? base[this.colIndexDireccion] : '').toString(),
       causal: obsLarga || cleanLabel,
       codigo_causal: idCausal,
       tipo_comentario: '',
@@ -199,7 +201,7 @@ export class ProcessingEngine {
       fuente_principal: 'movilidad',
       identificacion_valida: !!base,
       perfil_maestro: perfil,
-      cedula_maestra: (base ? (base as any[])[this.colIndexCedula] : '').toString(),
+      cedula_maestra: (base ? base[this.colIndexCedula] : '').toString(),
       telefono_maestro: (this.getFieldValue(row, ["celular", "telefono"]) || '').toString(),
       comentarios_concatenados: obsLarga,
       motivo_error: ''
@@ -226,11 +228,11 @@ export class ProcessingEngine {
 
     return {
       id_sistema: `TER-${product}-${date}-${Math.random()}`,
-      contrato: (base ? (base as any[])[this.colIndexContrato] : '').toString(),
+      contrato: (base ? base[this.colIndexContrato] : '').toString(),
       producto: product,
-      cliente: (base ? (base as any[])[this.colIndexNombre] : '').toString(),
-      direccion: (base ? (base as any[])[this.colIndexDireccion] : '').toString(),
-      cedula_maestra: (base ? (base as any[])[this.colIndexCedula] : '').toString(),
+      cliente: (base ? base[this.colIndexNombre] : '').toString(),
+      direccion: (base ? base[this.colIndexDireccion] : '').toString(),
+      cedula_maestra: (base ? base[this.colIndexCedula] : '').toString(),
       telefono_maestro: (this.getFieldValue(row, ["celular", "telefono"]) || '').toString(),
       causal: obs || cleanLabel,
       codigo_causal: codeM,
@@ -255,8 +257,7 @@ export class ProcessingEngine {
     
     const processRegistry = (registro: RegistroNormalizado) => {
       if (!registro) return;
-      if (start || end) {
-        if (!registro.fecha_gestion) return; 
+      if ((start || end) && registro.fecha_gestion) {
         if (start && registro.fecha_gestion < start) return;
         if (end && registro.fecha_gestion > end) return;
       }
