@@ -111,49 +111,42 @@ export class ProcessingEngine {
     maestroData.forEach(row => {
       // 1. Identificar columnas dinámicamente por contenido si los nombres fallan
       const keys = Object.keys(row);
-      let label = this.getFieldValue(row, ['CAUSAL', 'MOTIVO', 'DESCRIPCION']);
-      let perVal = this.getFieldValue(row, ['MEJOR PERFIL EN CVS', 'PERFIL CVS', 'PERFIL']);
-      let motVal = this.getFieldValue(row, ['MOTIVO DE NO PAGO CVS', 'MOTIVO CVS', 'MOTIVO_NO_PAGO_CVS']);
+      let causalLabel = this.getFieldValue(row, ['CAUSAL', 'MOTIVO', 'DESCRIPCION', 'CAUSAL GESTION', 'CAUSAL DE GESTIÓN']);
+      let perVal = this.getFieldValue(row, ['MEJOR PERFIL EN CVS', 'PERFIL CVS', 'PERFIL', 'MEJOR PERFIL']);
+      let motVal = this.getFieldValue(row, ['MOTIVO DE NO PAGO CVS', 'MOTIVO CVS', 'MOTIVO_NO_PAGO_CVS', 'MOTIVO DE NO PAGO']);
 
-      // Heurística: Si no encontró columnas por nombre, buscar por contenido
-      if (!label || !perVal || !motVal) {
-        for (const k of keys) {
-          const val = (row[k] || '').toString();
-          const nk = k.toUpperCase().trim();
-          
-          if (!label && (nk.includes('CAUSAL') || nk.includes('MOTIVO') || nk.includes('CONV') || this.extractCode(val))) {
-            label = val;
-          }
-          if (!perVal && (nk.includes('PERFIL') || nk.includes('CVS') || nk.includes('MEJOR'))) {
-            perVal = val;
-          }
-          if (!motVal && (nk.includes('MOTIVO') && nk.includes('CVS'))) {
-            motVal = val;
-          }
-        }
+      // Heurística de respaldo: Escaneo de todas las celdas
+      for (const k of keys) {
+        const nk = k.toUpperCase();
+        const val = (row[k] || '').toString();
+        if (!causalLabel && (nk.includes('CAUSAL') || nk.includes('CONV'))) causalLabel = val;
+        if (!perVal && nk.includes('PERFIL')) perVal = val;
+        if (!motVal && (nk.includes('MOTIVO') && nk.includes('CVS'))) motVal = val;
       }
 
-      if (label) {
-        const labelStr = label.toString();
-        const code = this.extractCode(labelStr);
-        const textOnlyNormalized = this.normalizeText(labelStr.replace(code, ''));
-        const fullNormalized = this.normalizeText(labelStr);
+      if (causalLabel || motVal) {
         const per = (perVal || '').toString().trim().toUpperCase();
         const mot = (motVal || '').toString().trim().toUpperCase();
+        
+        // Indexar por Código de Causal
+        const codeC = this.extractCode(causalLabel?.toString() || '');
+        if (codeC && per) this.movCausalToPerfilMap.set(codeC, per);
+        if (codeC && mot) this.terMotivoToCVSMap.set(codeC, mot);
 
-        // Indexar por todo lo posible
-        if (code) {
-          if (per) this.movCausalToPerfilMap.set(code, per);
-          if (mot) this.terMotivoToCVSMap.set(code, mot);
-          this.terMotivoToCodeMap.set(code, code);
+        // Indexar por Texto de Causal Normalizada
+        const normC = this.normalizeText(causalLabel?.toString() || '');
+        if (normC && per) {
+           if (!this.movCausalToPerfilMap.has(normC)) this.movCausalToPerfilMap.set(normC, per);
         }
-        if (textOnlyNormalized) {
-          if (per) this.movCausalToPerfilMap.set(textOnlyNormalized, per);
-          if (mot) this.terMotivoToCVSMap.set(textOnlyNormalized, mot);
-        }
-        if (fullNormalized) {
-          if (per && !this.movCausalToPerfilMap.has(fullNormalized)) this.movCausalToPerfilMap.set(fullNormalized, per);
-          if (mot && !this.terMotivoToCVSMap.has(fullNormalized)) this.terMotivoToCVSMap.set(fullNormalized, mot);
+
+        // Indexar por el MOTIVO CVS (CRUCIAL PARA TERRENO)
+        // Ejemplo: "NEGOCIACION EN CAMPO 1478" -> "PROMESA DE PAGO"
+        if (mot) {
+          const normM = this.normalizeText(mot);
+          const codeM = this.extractCode(mot);
+          if (normM && per) this.movCausalToPerfilMap.set(normM, per);
+          if (codeM && per) this.movCausalToPerfilMap.set(codeM, per); // Por si solo viene el número 1478
+          if (normM && mot) this.terMotivoToCVSMap.set(normM, mot);
         }
       }
     });
@@ -268,61 +261,57 @@ export class ProcessingEngine {
     const keys = Object.keys(row);
     // Priorizamos la columna exacta si existe
     const priorityKey = keys.find(k => {
-      const lk = k.toLowerCase();
-      return lk === 'fecha completada' || lk === 'fecha_gestion' || lk === 'fecha de gestion' || lk.includes('completación');
+      const lk = k.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      return lk === 'fecha completada' || lk === 'fecha_gestion' || lk === 'fecha de gestion' || lk.includes('completacio') || lk === 'fecha';
     });
     if (priorityKey && row[priorityKey] && row[priorityKey] !== '-') return this.formatDate(row[priorityKey]);
 
-    // Ignorar columnas irrelevantes que contienen "fecha"
     const relevantKeys = keys.filter(k => {
-      const lk = k.toLowerCase();
+      const lk = k.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
       const isHistorical = lk.includes('penultima') || lk.includes('nacimiento') || lk.includes('creacion') || lk.includes('vencimiento');
-      return (lk.includes('fecha') || lk.includes('time') || lk.includes('gestion') || lk.includes('compromiso')) && !isHistorical;
+      return (lk.includes('fecha') || lk.includes('time') || lk.includes('gestion') || lk.includes('complet')) && !isHistorical;
     });
 
-    // Si hay múltiples, buscar la que tenga un valor válido de fecha de este año o el pasado
     for (const k of relevantKeys) {
       const d = this.formatDate(row[k]);
       if (d && (d.startsWith('2025') || d.startsWith('2026'))) return d;
     }
-
-    const dateKey = relevantKeys.find(k => k.toLowerCase().includes('gestion') || k.toLowerCase().includes('completada')) 
-                  || relevantKeys[0];
-                  
-    return dateKey ? this.formatDate(row[dateKey]) : null;
+    
+    return null;
   }
 
   private homologateMovilidad(row: any): RegistroNormalizado {
-    const product = (this.getFieldValue(row, ["Producto", "CUENTA"]) || '').toString().trim();
+    const baseRow = {
+      producto: (this.getFieldValue(row, ["Producto", "CUENTA", "CUENTA_CONTRATO"]) || '').toString().trim(),
+      fecha: this.extractDateFromRow(row) || '',
+      observacion: (this.getFieldValue(row, ["Observación", "Observacion", "OBSERVACIÓN", "OBSERVACION", "DETALLE", "COMENTARIO", "GESTIÓN"]) || '').toString().trim(),
+    };
+    
+    const product = baseRow.producto;
     const base = this.baseGeneral.get(product);
     const comments = this.consolidateMovilidadComments(row);
     let causalRaw = (this.getFieldValue(row, ["Causal", "Causales", "Motivo", "Motivos", "Causal no pago", "Motivo no pago", "Comentario", "Comentarios", "COMENTARIO MASIVO", "COMENTARIOS MASIVOS", "Gestión", "Gestion", "Observacion", "Observación", "Observaciones", "RESULTADO", "DETALLE"]) || '').toString().trim();
-    // Corrección específica: 1474 -> 1473
     causalRaw = causalRaw.replace(/No Contesta - Numero Activo 1474/g, 'No Contesta - Numero Activo 1473');
-    
-    const observacion = (this.getFieldValue(row, ["Observación", "Observacion"]) || '').toString().trim();
     
     const idCausal = this.extractCode(causalRaw);
     const normText = this.normalizeText(causalRaw.replace(idCausal, ''));
     const fullNorm = this.normalizeText(causalRaw);
-    const causalLabel = causalRaw.replace(idCausal, '').replace(/^[- ]+/, '').trim().toUpperCase();
+    const cleanLabel = causalRaw.replace(idCausal, '').replace(/^[-\s]+/, '').trim().toUpperCase();
     
-    // Perfil Movilidad: Tomar DIRECTAMENTE de la causal (sin cruce con maestro)
-    let perfil = (causalLabel || '').toString().replace(/\d+/g, '').replace(/^[-\s]+/, '').trim().toUpperCase() || 'REVISIÓN MANUAL';
+    // Perfil Movilidad: Tomar DIRECTAMENTE de la causal (sin cruce con maestro) y QUITAR CÓDIGOS
+    let perfil = (cleanLabel || '').toString().replace(/\d+/g, '').replace(/^[-\s]+/, '').trim().toUpperCase() || 'REVISIÓN MANUAL';
     
     // Motivo de No Pago: BUSCARV con triple chequeo (Código, Full, Texto)
     const mappedMotDescription = this.terMotivoToCVSMap.get(idCausal) || this.terMotivoToCVSMap.get(fullNorm) || this.terMotivoToCVSMap.get(normText);
     const mappedMotCode = idCausal || this.terMotivoToCodeMap.get(fullNorm) || this.terMotivoToCodeMap.get(normText) || '';
-    const cleanLabel = causalRaw.replace(idCausal, '').replace(/^[-\s]+/, '').trim().toUpperCase();
     
-    // Si lo encontró en el maestro, usamos esa descripción oficial. Si no, lo que traía + código.
+    // Si lo encontró en el maestro, usamos esa descripción oficial.
     const motivoNP = (mappedMotDescription || `${cleanLabel} ${mappedMotCode}`).trim().toUpperCase();
 
     let error = '';
     if (!product) error = 'Producto/Cuenta vacío en archivo. ';
     if (!base) error += 'Producto no existe en Base General. ';
-    if (!causalRaw && !comments) error += 'Columnas de Motivo/Causal no encontradas o vacías. ';
-    if (perfil === 'REVISIÓN MANUAL') error += 'Causal no mapeada en Maestro. ';
+    if (perfil === 'REVISIÓN MANUAL') error += 'Causal no mapeada. ';
 
     return {
       id_sistema: `MOV-${product}-${Date.now()}`,
@@ -330,59 +319,57 @@ export class ProcessingEngine {
       producto: product,
       cliente: (base ? base[this.colIndexNombre] : '').toString(),
       direccion: (base ? base[this.colIndexDireccion] : '').toString(),
-      causal: observacion.toUpperCase(), // Gestión = Observación pura
-      codigo_causal: mappedMotCode, // CORRECCIÓN: Usar código de no pago
+      causal: baseRow.observacion.toUpperCase() || cleanLabel, 
+      codigo_causal: mappedMotCode,
       tipo_comentario: '',
       codigo_tipo_comentario: '',
       motivo_no_pago_original: causalRaw || comments || '',
       motivo_no_pago_consolidado: motivoNP,
-      fecha_gestion: this.extractDateFromRow(row) || '',
+      fecha_gestion: baseRow.fecha,
       estado_cruce: 'automatico',
-      estado_homologacion: this.movCausalToPerfilMap.has(idCausal) || this.movCausalToPerfilMap.has(normText) ? 'exitosa' : 'pendiente',
+      estado_homologacion: perfil && perfil !== 'REVISIÓN MANUAL' ? 'exitosa' : 'pendiente',
       editado_manualmente: false,
       fuente_principal: 'movilidad',
       identificacion_valida: !!base,
       perfil_maestro: perfil,
       cedula_maestra: (base ? base[this.colIndexCedula] : '').toString(),
-      telefono_maestro: (this.getFieldValue(row, ["celular de la persona que atendió", "Celular de persona que atendió", "celular persona que atendio", "Celular de la persona que atendio", "celular personal", "celular_personal", "numero marca", "numero de celular", "celular", "telefono", "numero contacto", "telefono nuevo para el cvs"]) || '').toString(),
+      telefono_maestro: (this.getFieldValue(row, ["celular de la persona que atendió", "Celular de persona que atendió", "celular", "telefono"]) || '').toString(),
       comentarios_concatenados: comments,
       motivo_error: error.trim()
     };
   }
 
   private homologateTerreno(row: any): RegistroNormalizado {
-    const product = (this.getFieldValue(row, ["PRODUCTO", "CUENTA"]) || '').toString().trim();
+    const baseRow = {
+      producto: (this.getFieldValue(row, ["PRODUCTO", "CUENTA", "SUSCRIPTOR"]) || '').toString().trim(),
+      fecha: this.extractDateFromRow(row) || '',
+      observacion: (this.getFieldValue(row, ["OBSERVACIONES DE CAMPO", "OBSERVACIONES", "OBSERVACION", "OBSERVACIÓN", "COMENTARIO", "GESTIÓN"]) || '').toString().trim(),
+    };
+    
+    const product = baseRow.producto;
     const base = this.baseGeneral.get(product);
-    let motivoNP = (this.getFieldValue(row, ["MOTIVO DE NO PAGO ", "MOTIVO DE NO PAGO", "Motivo", "Motivos", "Causal", "Causales", "Causal no pago", "Motivo no pago", "Comentario", "Comentarios", "COMENTARIO MASIVO", "COMENTARIOS MASIVOS", "Gestión", "Gestion", "Observacion", "Observación", "OBSERVACIONES", "OBSERVACIÓN", "OBSERVACION", "OBSERVACIONES DE CAMPO", "RESULTADO", "DETALLE"]) || '').toString().trim();
-    // Corrección específica: 1474 -> 1473
+    let motivoNP = (this.getFieldValue(row, ["MOTIVO DE NO PAGO ", "MOTIVO DE NO PAGO", "Motivo", "Causal", "Gestión", "RESULTADO"]) || '').toString().trim();
     motivoNP = motivoNP.replace(/No Contesta - Numero Activo 1474/g, 'No Contesta - Numero Activo 1473');
     
-    const observacion = (this.getFieldValue(row, ["OBSERVACIONES", "Observacion", "Observación"]) || '').toString().trim();
-
     const codeM = this.extractCode(motivoNP);
     const normM = this.normalizeText(motivoNP.replace(codeM, ''));
     const fullNormM = this.normalizeText(motivoNP);
 
-    // Perfil Terreno: SÍ cruzado con el maestro con triple chequeo
+    // Perfil Terreno: CRUCE OBLIGATORIO con Maestro
+    // Aquí buscamos por: Código, Texto Completo o Texto Normalizado del Motivo
     let perfil = this.movCausalToPerfilMap.get(codeM) || this.movCausalToPerfilMap.get(fullNormM) || this.movCausalToPerfilMap.get(normM);
+    perfil = (perfil || '').toString().replace(/\d+/g, '').replace(/^[-\s]+/, '').trim().toUpperCase() || 'REVISIÓN MANUAL';
     
-    // Motivo Terreno: BUSCARV hacia "MOTIVO DE NO PAGO CVS" en el maestro
+    // Motivo Terreno: BUSCARV oficial hacia "MOTIVO DE NO PAGO CVS"
     const mappedMotDescription = this.terMotivoToCVSMap.get(codeM) || this.terMotivoToCVSMap.get(fullNormM) || this.terMotivoToCVSMap.get(normM);
     const mappedMotCode = codeM || this.terMotivoToCodeMap.get(fullNormM) || this.terMotivoToCodeMap.get(normM) || '';
     const cleanLabel = motivoNP.replace(codeM, '').replace(/^[-\s]+/, '').trim().toUpperCase();
     
-    // Si lo encontró en el maestro, usamos esa descripción oficial. Si no, lo que traía + código.
     const motivoCVS = (mappedMotDescription || `${cleanLabel} ${mappedMotCode}`).trim().toUpperCase();
 
-    // Perfil Terreno: CRUCE OBLIGATORIO con Maestro (CONV)
-    let perfilFound = perfil; // 'perfil' ya viene del mapeo arriba
-    perfil = (perfilFound || '').toString().replace(/\d+/g, '').replace(/^[-\s]+/, '').trim().toUpperCase() || 'REVISIÓN MANUAL';
-
     let error = '';
-    if (!product) error = 'Producto/Cuenta vacío en archivo. ';
-    if (!base) error += 'Producto no existe en Base General. ';
-    if (!motivoNP) error += 'Columna de Motivo No Pago no encontrada o vacía. ';
-    if (perfil === 'REVISIÓN MANUAL') error += 'Motivo no encontrado en Maestro (CONV). ';
+    if (!product) error = 'Producto vacío. ';
+    if (perfil === 'REVISIÓN MANUAL') error += 'Motivo no mapeado en Maestro. ';
 
     return {
       id_sistema: `TER-${product}-${Date.now()}`,
@@ -391,21 +378,21 @@ export class ProcessingEngine {
       cliente: (base ? base[this.colIndexNombre] : '').toString(),
       direccion: (base ? base[this.colIndexDireccion] : '').toString(),
       cedula_maestra: (base ? base[this.colIndexCedula] : '').toString(),
-      telefono_maestro: (this.getFieldValue(row, ["telefono nuevo para el cvs", "telefono nuevo", "nuevo_telefono", "telefono_nuevo", "nuevo telefono", "celular de la persona que atendió", "Celular de persona que atendió", "celular nuevo", "numero marcar", "telefono adicional", "celular", "telefono", "numero adicional"]) || '').toString(),
-      causal: observacion.toUpperCase(), // Gestión = Observación pura
-      codigo_causal: mappedMotCode, // CORRECCIÓN: Usar código de no pago
+      telefono_maestro: (this.getFieldValue(row, ["telefono nuevo", "celular", "telefono"]) || '').toString(),
+      causal: baseRow.observacion.toUpperCase() || cleanLabel,
+      codigo_causal: mappedMotCode,
       tipo_comentario: '',
       codigo_tipo_comentario: '',
       motivo_no_pago_original: motivoNP,
       motivo_no_pago_consolidado: motivoCVS,
-      fecha_gestion: this.extractDateFromRow(row) || '',
+      fecha_gestion: baseRow.fecha,
       estado_cruce: 'automatico',
       estado_homologacion: perfil && perfil !== 'REVISIÓN MANUAL' ? 'exitosa' : 'pendiente',
       editado_manualmente: false,
       fuente_principal: 'terreno',
       identificacion_valida: !!base,
       perfil_maestro: perfil,
-      comentarios_concatenados: observacion,
+      comentarios_concatenados: baseRow.observacion,
       motivo_error: error.trim()
     };
   }
