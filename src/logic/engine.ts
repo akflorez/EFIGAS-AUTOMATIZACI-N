@@ -107,23 +107,22 @@ export class ProcessingEngine {
     this.terMotivoToCodeMap.clear();
 
     maestroData.forEach(row => {
-      const per = (this.getFieldValue(row, ['MEJOR PERFIL EN CVS', 'MEJOR PERFIL']) || '').toString().toUpperCase().trim();
-      const mot = (this.getFieldValue(row, ['MOTIVO DE NO PAGO CVS']) || '').toString().toUpperCase().trim();
-      const motCode = this.extractCode(mot);
+      // Mapeos de Terreno (Busca por Código o por Texto Normalizado)
+      const label = this.getFieldValue(row, ['CAUSAL', 'Causal', 'MOTIVO', 'Motivo', 'DESCRIPCION', 'Descripción']);
+      const perVal = this.getFieldValue(row, ['MEJOR PERFIL EN CVS', 'PERFIL CVS', 'PERFIL', 'Perfil', 'PERFIL_CVS']);
+      const motVal = this.getFieldValue(row, ['MOTIVO DE NO PAGO CVS', 'MOTIVO CVS', 'MOTIVO_NO_PAGO_CVS', 'MOTIVO_CVS', 'MOTIVO NO PAGO']);
 
-      // Recolectar TODAS las celdas de esta fila para buscar códigos y textos
-      const allVals = Object.values(row).map(v => v?.toString() || "");
-      
-      allVals.forEach(raw => {
-        const code = this.extractCode(raw);
-        const text = this.normalizeText(raw.replace(code, ''));
-        
+      if (label) {
+        const code = this.extractCode(label.toString());
+        const text = this.normalizeText(label.toString());
+        const per = (perVal || '').toString().trim().toUpperCase();
+        const mot = (motVal || '').toString().trim().toUpperCase();
+
         if (code) {
           if (per) this.movCausalToPerfilMap.set(code, per);
           if (mot) this.terMotivoToCVSMap.set(code, mot);
-          if (motCode) this.terMotivoToCodeMap.set(code, motCode);
+          this.terMotivoToCodeMap.set(code, code);
         }
-        
         if (text) {
           if (per) {
             this.movCausalToPerfilMap.set(text, per);
@@ -134,9 +133,10 @@ export class ProcessingEngine {
             });
           }
           if (mot) this.terMotivoToCVSMap.set(text, mot);
-          if (motCode) this.terMotivoToCodeMap.set(text, motCode);
+          const rawCode = this.extractCode(label.toString());
+          if (rawCode) this.terMotivoToCodeMap.set(text, rawCode);
         }
-      });
+      }
     });
   }
 
