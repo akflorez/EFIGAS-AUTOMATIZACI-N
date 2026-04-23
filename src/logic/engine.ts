@@ -16,6 +16,11 @@ export class ProcessingEngine {
   constructor() {
   }
 
+  private normalizeText(s: string): string {
+    if (!s) return "";
+    return s.toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+
   private getFieldValue(row: any, searchTerms: string[]): any {
     if (!row) return undefined;
     const keys = Object.keys(row);
@@ -31,44 +36,52 @@ export class ProcessingEngine {
   }
 
   public async indexBaseGeneral(data: BaseGeneralRaw[], onProgress: (p: number) => void) {
+    if (!data || data.length === 0) { onProgress(100); return; }
+    
     const total = data.length;
-    if (total === 0) { onProgress(100); return; }
     let headerRowIndex = -1;
-    for (let i = 0; i < Math.min(data.length, 10); i++) {
+    
+    // Buscar encabezados en las primeras 20 filas
+    for (let i = 0; i < Math.min(data.length, 20); i++) {
         const row = data[i];
         if (!row || !Array.isArray(row)) continue;
         const rowStr = row.map(v => this.normalizeText(v?.toString() || ""));
-        if (rowStr.includes('producto') || rowStr.includes('contrato') || rowStr.includes('nombre')) {
+        if (rowStr.some(v => v.includes('producto') || v.includes('contrato') || v.includes('cuenta'))) {
           headerRowIndex = i;
           rowStr.forEach((val, idx) => {
-            if (val === 'cedula' || val === 'identificacion' || val === 'documento') this.colIndexCedula = idx;
-            if (val === 'nombre' || val === 'cliente') this.colIndexNombre = idx;
-            if (val === 'direccion' || val === 'domicilio') this.colIndexDireccion = idx;
-            if (val === 'contrato') this.colIndexContrato = idx;
+            if (val.includes('cedula') || val.includes('identificacion') || val.includes('documento')) this.colIndexCedula = idx;
+            if (val.includes('nombre') || val.includes('cliente')) this.colIndexNombre = idx;
+            if (val.includes('direccion') || val.includes('domicilio')) this.colIndexDireccion = idx;
+            if (val.includes('contrato')) this.colIndexContrato = idx;
           });
           break;
         }
     }
 
-    const chunkSize = 10000;
+    const chunkSize = 5000;
     for (let i = 0; i < total; i += chunkSize) {
       const end = Math.min(i + chunkSize, total);
       for (let j = i; j < end; j++) {
+        if (j <= headerRowIndex) continue;
         const row = data[j];
-        if (!row || j <= headerRowIndex) continue;
+        if (!row || !Array.isArray(row)) continue;
+        
         let key = '';
         if (headerRowIndex !== -1) {
-          const headerRow = data[headerRowIndex];
-          const prodIdx = (headerRow as any).findIndex((h: any) => {
+          const headerRow = data[headerRowIndex] as any[];
+          const prodIdx = headerRow.findIndex(h => {
              const nh = this.normalizeText(h?.toString() || "");
-             return nh === 'producto' || nh === 'cuenta';
+             return nh.includes('producto') || nh.includes('cuenta') || nh.includes('contrato');
           });
           if (prodIdx !== -1) key = (row[prodIdx] || '').toString().trim();
           else key = (row[1] || '').toString().trim();
         } else {
           key = (row[1] || '').toString().trim();
         }
-        if (key) this.baseGeneral.set(key.replace(/\.0$/, ''), row);
+        
+        if (key) {
+          this.baseGeneral.set(key.replace(/\.0$/, ''), row);
+        }
       }
       onProgress(Math.floor((i / total) * 100));
       await new Promise(r => setTimeout(r, 0));
@@ -77,40 +90,27 @@ export class ProcessingEngine {
   }
 
   public indexMasters(maestroData: any[]) {
+    if (!maestroData) return;
     maestroData.forEach(row => {
       const original = (this.getFieldValue(row, ["MOTIVO DE NO PAGO CVS", "MOTIVO"]) || "").toString().trim();
       const mejorPerfil = (this.getFieldValue(row, ["MEJOR PERFIL EN CVS", "PERFIL"]) || "").toString().trim();
       const code = this.extractCode(original);
       if (original) {
-        if (mejorPerfil) {
           const fullNorm = this.normalizeText(original);
-          this.movCausalToPerfilMap.set(fullNorm, mejorPerfil.toUpperCase());
-          this.terMotivoToCVSMap.set(fullNorm, original.toUpperCase());
-          if (code) {
-             this.movCausalToPerfilMap.set(code, mejorPerfil.toUpperCase());
-             this.terMotivoToCVSMap.set(code, original.toUpperCase());
-             this.terMotivoToCodeMap.set(fullNorm, code);
+          if (mejorPerfil) {
+            this.movCausalToPerfilMap.set(fullNorm, mejorPerfil.toUpperCase());
+            if (code) this.movCausalToPerfilMap.set(code, mejorPerfil.toUpperCase());
           }
-        }
+          this.terMotivoToCVSMap.set(fullNorm, original.toUpperCase());
+          if (code) this.terMotivoToCVSMap.set(code, original.toUpperCase());
       }
     });
   }
 
-  public consolidateMovilidadComments(row: any): string {
-    const keys = Object.keys(row);
-    const commentFields = keys.filter(k => {
-      const sk = this.normalizeText(k);
-      return (sk.includes('observaci') || sk.includes('detalle') || sk.includes('gestion') || sk.includes('comentario')) 
-             && !sk.includes('causal') && !sk.includes('fecha');
-    });
-    const comments: string[] = [];
-    for (const field of commentFields) {
-      const val = row[field]?.toString().trim();
-      if (val && val !== 'null' && val !== '0' && val !== '-' && val.length > 3) {
-        comments.push(val);
-      }
-    }
-    return comments.join(', ').toUpperCase();
+  private extractCode(causal: string): string {
+    if (!causal) return '';
+    const match = causal.toString().trim().match(/(\d{3,5})/);
+    return match ? match[1] : '';
   }
 
   private formatDate(val: any): string {
@@ -142,43 +142,31 @@ export class ProcessingEngine {
       }
     }
     if (!date || isNaN(date.getTime())) return '';
-    const year = date.getFullYear();
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
   }
 
-  private removeAccents(str: string): string {
-    if (!str) return '';
-    return str.toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ñ/g, "n").replace(/Ñ/g, "N").toUpperCase().trim();
-  }
-
-  private normalizeText(s: string): string {
-    if (!s) return "";
-    return s.toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, ' ').replace(/\s+/g, ' ').trim();
-  }
-
-  private extractCode(causal: string): string {
-    if (!causal) return '';
-    const match = causal.toString().trim().match(/(\d{3,5})/);
-    return match ? match[1] : '';
-  }
-
-  private findAnyProduct(row: any): string {
-    const found = this.getFieldValue(row, ["Producto", "CUENTA", "SUSCRIPTOR", "CONTRATO"]);
-    if (found) return found.toString().trim().replace(/\.0$/, '');
-    return '';
+  public consolidateMovilidadComments(row: any): string {
+    const keys = Object.keys(row);
+    const commentFields = keys.filter(k => {
+      const sk = this.normalizeText(k);
+      return (sk.includes('observaci') || sk.includes('detalle') || sk.includes('gestion') || sk.includes('comentario')) 
+             && !sk.includes('causal') && !sk.includes('fecha');
+    });
+    const comments: string[] = [];
+    for (const field of commentFields) {
+      const val = row[field]?.toString().trim();
+      if (val && val !== 'null' && val !== '0' && val !== '-' && val.length > 3) comments.push(val);
+    }
+    return comments.join(', ').toUpperCase();
   }
 
   private homologateMovilidad(row: any): RegistroNormalizado {
-    const product = this.findAnyProduct(row);
-    if (!product || product === '0') return null as any;
+    const productFound = this.getFieldValue(row, ["Producto", "CUENTA", "SUSCRIPTOR", "CONTRATO"]);
+    if (!productFound) return null as any;
+    const product = productFound.toString().trim().replace(/\.0$/, '');
 
-    // REGLA DE ORO: Si CAUSAL está lleno, hay gestión. Si no, se ignora.
     const causalRaw = (this.getFieldValue(row, ["Causal", "Motivo", "Causales"]) || '').toString().trim();
-    if (!causalRaw || causalRaw === '0' || causalRaw === '-' || causalRaw.length < 2) {
-       return null as any;
-    }
+    if (!causalRaw || causalRaw === '0' || causalRaw === '-' || causalRaw.length < 2) return null as any;
 
     const base = this.baseGeneral.get(product);
     const date = this.formatDate(this.getFieldValue(row, ["Fecha", "Fecha Gestion", "Fecha Completada"])) || '';
@@ -189,8 +177,7 @@ export class ProcessingEngine {
     const normCausal = this.normalizeText(causalRaw);
 
     const perfilFromMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(normCausal);
-    let perfil = perfilFromMaestro || cleanLabel || 'REVISIÓN MANUAL';
-    perfil = perfil.toString().replace(/\d+/g, '').replace(/^[-\s]+/, '').trim().toUpperCase();
+    let perfil = (perfilFromMaestro || cleanLabel || 'REVISIÓN MANUAL').toString().replace(/\d+/g, '').replace(/^[-\s]+/, '').trim().toUpperCase();
 
     const mappedMotDescription = this.terMotivoToCVSMap.get(idCausal) || this.terMotivoToCVSMap.get(normCausal);
     const motivoNP = (mappedMotDescription || `${cleanLabel} ${idCausal}`).trim().toUpperCase();
@@ -222,14 +209,15 @@ export class ProcessingEngine {
   }
 
   private homologateTerreno(row: any): RegistroNormalizado {
-    const product = this.findAnyProduct(row);
-    if (!product || product === '0') return null as any;
+    const productFound = this.getFieldValue(row, ["PRODUCTO", "CUENTA", "SUSCRIPTOR", "CONTRATO"]);
+    if (!productFound) return null as any;
+    const product = productFound.toString().trim().replace(/\.0$/, '');
 
-    let motivoNP = (this.getFieldValue(row, ["MOTIVO DE NO PAGO ", "MOTIVO"]) || '').toString().trim();
+    let motivoNP = (this.getFieldValue(row, ["MOTIVO DE NO PAGO ", "MOTIVO", "PROCESO"]) || '').toString().trim();
     if (!motivoNP || motivoNP === '0' || motivoNP === '-') return null as any;
 
     const base = this.baseGeneral.get(product);
-    const date = this.formatDate(this.getFieldValue(row, ["Fecha", "Gestionada"])) || '';
+    const date = this.formatDate(this.getFieldValue(row, ["Fecha", "Gestionada", "Fecha Gestion"])) || '';
     const codeM = this.extractCode(motivoNP);
     const normM = this.normalizeText(motivoNP);
     const perfil = (this.movCausalToPerfilMap.get(codeM) || this.movCausalToPerfilMap.get(normM) || '').toString().replace(/\d+/g, '').replace(/^[-\s]+/, '').trim().toUpperCase() || 'REVISIÓN MANUAL';
@@ -266,34 +254,35 @@ export class ProcessingEngine {
 
   public processAll(movilidadData: any[], terrenoData: any[], start?: string, end?: string): RegistroNormalizado[] {
     const results: RegistroNormalizado[] = [];
-    const filterAndAdd = (registro: RegistroNormalizado) => {
+    
+    // Función auxiliar para aplicar filtros de fecha y agregar a resultados
+    const processRegistry = (registro: RegistroNormalizado) => {
       if (!registro) return;
-      if (start || end) {
-        if (!registro.fecha_gestion) return; 
+      if ((start || end) && registro.fecha_gestion) {
         if (start && registro.fecha_gestion < start) return;
         if (end && registro.fecha_gestion > end) return;
       }
       results.push(registro);
     };
-    movilidadData.forEach(row => filterAndAdd(this.homologateMovilidad(row)));
-    terrenoData.forEach(row => filterAndAdd(this.homologateTerreno(row)));
+
+    if (movilidadData) movilidadData.forEach(row => processRegistry(this.homologateMovilidad(row)));
+    if (terrenoData) terrenoData.forEach(row => processRegistry(this.homologateTerreno(row)));
+
     return results;
   }
 
   public createExportData(resultados: RegistroNormalizado[]): any[] {
     return resultados.map(r => ({
-      'gestion': this.removeAccents(r.causal || ''),
+      'gestion': (r.causal || '').toString().toUpperCase().trim(),
       'usuario': 'jairo.quintero132',
       'fechagestion': r.fecha_gestion,
       'accion': 'VISITA',
-      'perfil': this.removeAccents(r.perfil_maestro || ''),
-      'motivonopago': this.removeAccents(r.motivo_no_pago_consolidado || ''),
+      'perfil': (r.perfil_maestro || '').toString().toUpperCase().trim(),
+      'motivonopago': (r.motivo_no_pago_consolidado || '').toString().toUpperCase().trim(),
       'numeromarcado': r.telefono_maestro || '',
       'identificacion': r.cedula_maestra || '',
       'cuenta': r.producto || '',
-      'valorprome': '',
-      'fechaprome': '',
-      'cuota': ''
+      'valorprome': '', 'fechaprome': '', 'cuota': ''
     }));
   }
 }
