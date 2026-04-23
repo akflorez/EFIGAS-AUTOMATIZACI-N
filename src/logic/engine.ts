@@ -28,6 +28,7 @@ export class ProcessingEngine {
   private getFieldValue(row: any, searchTerms: string[]): any {
     if (!row) return undefined;
     const keys = Object.keys(row);
+    // Búsqueda EXACTA para no confundir columnas de ruido con Causales
     for (const term of searchTerms) {
       const cleanTerm = this.normalizeText(term).replace(/\s+/g, '');
       const foundKey = keys.find(k => {
@@ -41,11 +42,9 @@ export class ProcessingEngine {
 
   public async indexBaseGeneral(data: BaseGeneralRaw[], onProgress: (p: number) => void) {
     if (!data || data.length === 0) { onProgress(100); return; }
-    
     const rawData = data as unknown as any[][];
     const total = rawData.length;
     let headerRowIndex = -1;
-    
     for (let i = 0; i < Math.min(rawData.length, 30); i++) {
         const row = rawData[i];
         if (!row || !Array.isArray(row)) continue;
@@ -69,7 +68,6 @@ export class ProcessingEngine {
         if (j <= headerRowIndex) continue;
         const row = rawData[j];
         if (!row || !Array.isArray(row)) continue;
-        
         let key = '';
         if (headerRowIndex !== -1) {
           const headerRow = rawData[headerRowIndex];
@@ -79,13 +77,8 @@ export class ProcessingEngine {
           });
           if (prodIdx !== -1) key = this.safeString(row[prodIdx]);
           else key = this.safeString(row[1]);
-        } else {
-          key = this.safeString(row[1]);
-        }
-        
-        if (key) {
-          this.baseGeneral.set(key.replace(/\.0$/, ''), row);
-        }
+        } else { key = this.safeString(row[1]); }
+        if (key) this.baseGeneral.set(key.replace(/\.0$/, ''), row);
       }
       onProgress(Math.floor((i / total) * 100));
       await new Promise(r => setTimeout(r, 0));
@@ -159,7 +152,9 @@ export class ProcessingEngine {
     const comments: string[] = [];
     for (const field of commentFields) {
       const val = this.safeString(row[field]);
-      if (val && val !== 'null' && val !== '0' && val !== '-' && val.length > 3) comments.push(val);
+      if (val && val.length > 5 && val !== 'null' && val !== '0' && val !== '-') {
+        comments.push(val);
+      }
     }
     return comments.join(', ').toUpperCase();
   }
@@ -169,8 +164,9 @@ export class ProcessingEngine {
     if (!productFound) return null as any;
     const product = this.safeString(productFound).replace(/\.0$/, '');
 
+    // FILTRO RADICAL: Causal Requerida para Movilidad
     const causalRaw = this.safeString(this.getFieldValue(row, ["Causal", "Motivo", "Causales"]));
-    if (!causalRaw || causalRaw === '0' || causalRaw === '-' || causalRaw.length < 2) return null as any;
+    if (!causalRaw || causalRaw === '0' || causalRaw === '-' || causalRaw.length < 3) return null as any;
 
     const base = this.baseGeneral.get(product);
     const date = this.formatDate(this.getFieldValue(row, ["Fecha", "Fecha Gestion", "Fecha Completada"])) || '';
@@ -179,10 +175,8 @@ export class ProcessingEngine {
     const idCausal = this.extractCode(causalRaw);
     const cleanLabel = causalRaw.replace(idCausal, '').replace(/^[-\s]+/, '').trim().toUpperCase();
     const normCausal = this.normalizeText(causalRaw);
-
     const perfilFromMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(normCausal);
     const perfil = (perfilFromMaestro || cleanLabel || 'REVISIÓN MANUAL').toString().toUpperCase().trim();
-
     const mappedMotDescription = this.terMotivoToCVSMap.get(idCausal) || this.terMotivoToCVSMap.get(normCausal);
     const motivoNP = (mappedMotDescription || `${cleanLabel} ${idCausal}`).trim().toUpperCase();
 
@@ -217,6 +211,7 @@ export class ProcessingEngine {
     if (!productFound) return null as any;
     const product = this.safeString(productFound).replace(/\.0$/, '');
 
+    // Terreno: Tomamos lo que esté en gestión
     let motivoRaw = this.safeString(this.getFieldValue(row, ["MOTIVO DE NO PAGO ", "MOTIVO", "PROCESO"]));
     if (!motivoRaw || motivoRaw === '0' || motivoRaw === '-') return null as any;
 
@@ -226,7 +221,6 @@ export class ProcessingEngine {
     const normM = this.normalizeText(motivoRaw);
     const perfilRaw = this.movCausalToPerfilMap.get(codeM) || this.movCausalToPerfilMap.get(normM) || '';
     const perfil = (perfilRaw || 'REVISIÓN MANUAL').toString().toUpperCase().trim();
-    
     const mappedMotDescription = this.terMotivoToCVSMap.get(codeM) || this.terMotivoToCVSMap.get(normM);
     const cleanLabel = motivoRaw.replace(codeM, '').replace(/^[-\s]+/, '').trim().toUpperCase();
     const motivoCVS = (mappedMotDescription || `${cleanLabel} ${codeM}`).trim().toUpperCase();
@@ -263,10 +257,14 @@ export class ProcessingEngine {
     
     const processRegistry = (registro: RegistroNormalizado) => {
       if (!registro) return;
-      if ((start || end) && registro.fecha_gestion) {
+      
+      // FILTRO DE FECHA OBLIGATORIO: Si hay un rango, el registro DEBE tener fecha y estar dentro.
+      if (start || end) {
+        if (!registro.fecha_gestion) return; // Si no hay fecha, se borra (ruido)
         if (start && registro.fecha_gestion < start) return;
         if (end && registro.fecha_gestion > end) return;
       }
+      
       results.push(registro);
     };
 
