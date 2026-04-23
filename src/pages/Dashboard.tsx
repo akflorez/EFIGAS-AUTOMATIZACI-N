@@ -7,9 +7,9 @@ import { ReportEngine } from '../logic/reportEngine';
 import { LegalizationEngine } from '../logic/legalizationEngine';
 import { 
   Upload, FileCheck, AlertCircle, Play, Download, 
-  Settings, Database, ClipboardList, PackageCheck,
+  Settings, Database, ClipboardList,
   LogOut, ChevronRight, BarChart3,
-  Layers, User as UserIcon, Calendar, AlertTriangle,
+  Layers, User as UserIcon, Calendar,
   CircleDollarSign, Map
 } from 'lucide-react';
 
@@ -49,7 +49,6 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [progress, setProgress] = useState(0);
   const [statusMessage, setStatusMessage] = useState('');
   const [resultados, setResultados] = useState<RegistroNormalizado[]>([]);
-  const [showOnlyInvalid, setShowOnlyInvalid] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [selectedLegalizationTipo, setSelectedLegalizationTipo] = useState<string[]>(['1367']);
 
@@ -80,7 +79,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               const baseSheetName = sheetNames.find(n => n.toUpperCase().includes('BASE GENERAL'));
               
               if (!convSheetName || !baseSheetName) {
-                const errorMsg = `Error: No se encontró la pestaña "${!convSheetName ? 'CONV' : 'BASE GENERAL'}". Disponibles: [${sheetNames.join(', ')}]`;
+                const errorMsg = `Error: No se encontró la pestaña "${!convSheetName ? 'CONV' : 'BASE GENERAL'}"`;
                 setFiles((prev: DashboardFiles) => ({
                   ...prev,
                   master: { ...prev.master, loaded: false, error: errorMsg, name: file.name }
@@ -182,11 +181,11 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       setStatusMessage('Analizando Base General...');
       await engine.indexBaseGeneral(files.master.secondaryData as any[], (p) => setProgress(5 + Math.floor(p * 0.15)));
 
-      setStatusMessage('Aplicando Lógica Selectiva (Movilidad Completo / Terreno por Fecha)...');
+      setStatusMessage('Aplicando Lógica Selectiva...');
       setProgress(25);
       
       const results = engine.processAll(files.movilidad.data, files.terreno.data, fechaInicio, fechaFin);
-      const { movTotal, movConCausal, movEnFecha, terTotal, terConMotivo, terEnFecha } = engine.stats;
+      const { movTotal, movConCausal, terTotal, terEnFecha } = engine.stats;
 
       setProgress(95);
       if (results.length === 0) {
@@ -209,21 +208,6 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       ...prev,
       [type]: { loaded: false, name: '', data: [], secondaryData: type === 'master' ? [] : undefined }
     }));
-  };
-
-  const clearAll = () => {
-    setFiles({
-      movilidad: { loaded: false, name: '', data: [] },
-      terreno: { loaded: false, name: '', data: [] },
-      master: { loaded: false, name: '', data: [], secondaryData: [] },
-      maestro: { loaded: false, name: '', data: [] },
-    });
-    setResultados([]);
-    setDisponiblesFechas([]);
-    setFechaInicio('');
-    setFechaFin('');
-    setStatusMessage('');
-    setProgress(0);
   };
 
   const updateRegistro = (id: string, updates: Partial<RegistroNormalizado>) => {
@@ -314,16 +298,16 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                   <h4 className="text-sm font-black text-slate-700 uppercase tracking-tight">Filtro de Fecha (Solo Gestión Terreno)</h4>
                 </div>
                 <div className="flex flex-col md:flex-row gap-6">
-                  <div className="flex-1"><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Fecha Desde</label><input type="date" value={fechaInicio} className="border-2 border-slate-200 rounded-xl px-4 py-3 text-sm w-full outline-none focus:border-efigas-primary" onChange={(e) => setFechaInicio(e.target.value)} /></div>
-                  <div className="flex-1"><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Fecha Hasta</label><input type="date" value={fechaFin} className="border-2 border-slate-200 rounded-xl px-4 py-3 text-sm w-full outline-none focus:border-efigas-primary" onChange={(e) => setFechaFin(e.target.value)} /></div>
+                  <div className="flex-1"><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Fecha Desde</label><input type="date" value={fechaInicio} className="border-2 border-slate-200 rounded-xl px-4 py-3 text-sm w-full outline-none focus:border-efigas-primary" onChange={(e: ChangeEvent<HTMLInputElement>) => setFechaInicio(e.target.value)} /></div>
+                  <div className="flex-1"><label className="block text-xs font-bold text-slate-400 uppercase mb-2">Fecha Hasta</label><input type="date" value={fechaFin} className="border-2 border-slate-200 rounded-xl px-4 py-3 text-sm w-full outline-none focus:border-efigas-primary" onChange={(e: ChangeEvent<HTMLInputElement>) => setFechaFin(e.target.value)} /></div>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <FileCard title="Movilidad (Libro)" icon={<Database size={24} />} status={files.movilidad} onUpload={(e) => handleFileUpload(e, 'movilidad')} onRemove={() => removeFile('movilidad')} accent="blue" />
-              <FileCard title="Gestión Terreno" icon={<ClipboardList size={24} />} status={files.terreno} onUpload={(e) => handleFileUpload(e, 'terreno')} onRemove={() => removeFile('terreno')} accent="green" />
-              <FileCard title="Seguimiento (Master)" icon={<AlertCircle size={24} />} status={files.master} onUpload={(e) => handleFileUpload(e, 'master')} onRemove={() => removeFile('master')} accent="amber" />
-              <FileCard title="Maestro Perfiles" icon={<Settings size={24} />} status={files.maestro} onUpload={(e) => handleFileUpload(e, 'maestro')} onRemove={() => removeFile('maestro')} accent="slate" />
+              <FileCard title="Movilidad (Libro)" icon={<Database size={24} />} status={files.movilidad} onUpload={(e: ChangeEvent<HTMLInputElement>) => handleFileUpload(e, 'movilidad')} onRemove={() => removeFile('movilidad')} accent="blue" />
+              <FileCard title="Gestión Terreno" icon={<ClipboardList size={24} />} status={files.terreno} onUpload={(e: ChangeEvent<HTMLInputElement>) => handleFileUpload(e, 'terreno')} onRemove={() => removeFile('terreno')} accent="green" />
+              <FileCard title="Seguimiento (Master)" icon={<AlertCircle size={24} />} status={files.master} onUpload={(e: ChangeEvent<HTMLInputElement>) => handleFileUpload(e, 'master')} onRemove={() => removeFile('master')} accent="amber" />
+              <FileCard title="Maestro Perfiles" icon={<Settings size={24} />} status={files.maestro} onUpload={(e: ChangeEvent<HTMLInputElement>) => handleFileUpload(e, 'maestro')} onRemove={() => removeFile('maestro')} accent="slate" />
             </div>
 
             <section className="glass-card p-12 text-center relative overflow-hidden">
@@ -374,7 +358,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
-                  <FileCard title="Archivo Master" icon={<Database size={24} />} status={files.master} onUpload={(e) => handleFileUpload(e, 'master')} onRemove={() => removeFile('master')} accent="amber" />
+                  <FileCard title="Archivo Master" icon={<Database size={24} />} status={files.master} onUpload={(e: ChangeEvent<HTMLInputElement>) => handleFileUpload(e, 'master')} onRemove={() => removeFile('master')} accent="amber" />
                   <div className="p-6 rounded-2xl border-2 border-slate-100 bg-slate-50 flex flex-col justify-center">
                      <p className="text-sm font-bold text-slate-500">Plantilla Oficial EMDECOB v2026.04.16 - Lista para procesar.</p>
                   </div>
@@ -425,12 +409,16 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 <h3 className="text-2xl font-black mb-4">Módulo de Legalizaciones</h3>
                 <div className="grid grid-cols-4 gap-4 mb-8">
                    {['1367', '1368', '1369', 'TODOS'].map(t => (
-                     <button key={t} onClick={() => setSelectedLegalizationTipo(t === 'TODOS' ? ['1367', '1368', '1369'] : [t])} className={`p-4 rounded-xl font-bold border transition-all ${selectedLegalizationTipo.includes(t) || (t === 'TODOS' && selectedLegalizationTipo.length === 3) ? 'bg-amber-500 text-white border-amber-600' : 'bg-slate-50 text-slate-400'}`}>
+                     <button 
+                       key={t} 
+                       onClick={() => setSelectedLegalizationTipo(t === 'TODOS' ? ['1367', '1368', '1369'] : [t])} 
+                       className={`p-4 rounded-xl font-bold border transition-all ${selectedLegalizationTipo.includes(t) || (t === 'TODOS' && selectedLegalizationTipo.length === 3) ? 'bg-amber-500 text-white border-amber-600' : 'bg-slate-50 text-slate-400'}`}
+                     >
                         {t}
                      </button>
                    ))}
                 </div>
-                <FileCard title="Base General" icon={<Database size={24} />} status={files.master} onUpload={(e) => handleFileUpload(e, 'master')} onRemove={() => removeFile('master')} accent="amber" />
+                <FileCard title="Base General" icon={<Database size={24} />} status={files.master} onUpload={(e: ChangeEvent<HTMLInputElement>) => handleFileUpload(e, 'master')} onRemove={() => removeFile('master')} accent="amber" />
                 <button 
                   onClick={async () => {
                     if (!files.master.loaded) return alert('Carga la base primero.');
@@ -462,7 +450,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   );
 }
 
-function NavItem({ active, onClick, icon, label, collapsed }: { active: boolean, onClick: () => void, icon: any, label: string, collapsed: boolean }) {
+function NavItem({ active, onClick, icon, label, collapsed }: { active: boolean, onClick: () => void, icon: ReactNode, label: string, collapsed: boolean }) {
   return (
     <div onClick={onClick} className={`flex items-center gap-4 px-4 py-3 rounded-xl cursor-pointer transition-all ${active ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/20' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
       {icon} {!collapsed && <span className="font-bold text-sm">{label}</span>}
@@ -470,7 +458,17 @@ function NavItem({ active, onClick, icon, label, collapsed }: { active: boolean,
   );
 }
 
-function FileCard({ title, icon, status, onUpload, onRemove, accent, description }: any) {
+interface FileCardProps {
+  title: string;
+  icon: ReactNode;
+  status: FileStatus;
+  onUpload: (e: ChangeEvent<HTMLInputElement>) => void;
+  onRemove: () => void;
+  accent?: 'blue' | 'green' | 'amber' | 'slate';
+  description?: string;
+}
+
+function FileCard({ title, icon, status, onUpload, onRemove, accent }: FileCardProps) {
   return (
     <div className={`bg-white p-6 rounded-3xl border border-slate-100 shadow-sm transition-all hover:shadow-md ${status.loaded ? 'ring-2 ring-emerald-500/20 shadow-lg' : ''}`}>
       <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-4 ${accent === 'blue' ? 'bg-blue-50 text-blue-500' : accent === 'green' ? 'bg-emerald-50 text-emerald-500' : accent === 'amber' ? 'bg-amber-50 text-amber-500' : 'bg-slate-100 text-slate-500'}`}>{icon}</div>
@@ -485,7 +483,7 @@ function FileCard({ title, icon, status, onUpload, onRemove, accent, description
   );
 }
 
-function KPI({ label, value, color = "text-slate-900" }: any) {
+function KPI({ label, value, color = "text-slate-900" }: { label: string, value: number, color?: string }) {
   return (
     <div><p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{label}</p><p className={`text-2xl font-black ${color}`}>{value}</p></div>
   );
