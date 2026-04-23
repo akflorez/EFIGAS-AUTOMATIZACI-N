@@ -8,10 +8,10 @@ export class ProcessingEngine {
   private movCausalToPerfilMap: Map<string, string> = new Map();
   private terMotivoToCVSMap: Map<string, string> = new Map();
   private terMotivoToCodeMap: Map<string, string> = new Map();
-  private colIndexCedula: number = 14;   // Default O (14)
-  private colIndexNombre: number = 2;    // Default C (2)
-  private colIndexDireccion: number = 5; // Default F (5)
-  private colIndexContrato: number = 1;  // Default B (1)
+  private colIndexCedula: number = 14;   
+  private colIndexNombre: number = 2;    
+  private colIndexDireccion: number = 5; 
+  private colIndexContrato: number = 1;  
   
   constructor() {
   }
@@ -29,7 +29,7 @@ export class ProcessingEngine {
     }
     for (const term of searchTerms) {
       const cleanTerm = this.normalizeText(term).replace(/\s+/g, '');
-      if (cleanTerm.length < 4) continue; 
+      if (cleanTerm.length < 3) continue; 
       const foundKey = keys.find(k => {
         const ck = this.normalizeText(k).replace(/\s+/g, '');
         return ck.includes(cleanTerm) || cleanTerm.includes(ck);
@@ -87,8 +87,8 @@ export class ProcessingEngine {
 
   public indexMasters(maestroData: any[]) {
     maestroData.forEach(row => {
-      const original = (this.getFieldValue(row, ["MOTIVO DE NO PAGO CVS", "MOTIVO_DE_NO_PAGO_CVS", "MOTIVO DE NO PAGO ", "MOTIVO"]) || "").toString().trim();
-      const mejorPerfil = (this.getFieldValue(row, ["MEJOR PERFIL EN CVS", "MEJOR_PERFIL_EN_CVS", "PERFIL"]) || "").toString().trim();
+      const original = (this.getFieldValue(row, ["MOTIVO DE NO PAGO CVS", "MOTIVO"]) || "").toString().trim();
+      const mejorPerfil = (this.getFieldValue(row, ["MEJOR PERFIL EN CVS", "PERFIL"]) || "").toString().trim();
       const code = this.extractCode(original);
       if (original) {
         if (mejorPerfil) {
@@ -193,11 +193,11 @@ export class ProcessingEngine {
   }
 
   private homologateMovilidad(row: any): RegistroNormalizado {
-    const product = (this.getFieldValue(row, ["Producto", "CUENTA", "CUENTA_CONTRATO"]) || '').toString().trim().replace(/\.0$/, '');
+    const product = (this.getFieldValue(row, ["Producto", "CUENTA", "SUSCRIPTOR", "CONTRATO"]) || '').toString().trim().replace(/\.0$/, '');
     const base = this.baseGeneral.get(product);
     const date = this.extractDateFromRow(row) || '';
     const comments = this.consolidateMovilidadComments(row);
-    let causalRaw = (this.getFieldValue(row, ["Causal", "Causales", "Motivo", "CANT"]) || '').toString().trim();
+    let causalRaw = (this.getFieldValue(row, ["Causal", "Motivo", "CANT", "OBSERVACION"]) || '').toString().trim();
     causalRaw = causalRaw.replace(/No Contesta - Numero Activo 1474/g, 'No Contesta - Numero Activo 1473');
     const idCausal = this.extractCode(causalRaw);
     const cleanLabel = causalRaw.replace(idCausal, '').replace(/^[-\s]+/, '').trim().toUpperCase();
@@ -206,7 +206,7 @@ export class ProcessingEngine {
     const motivoNP = (mappedMotDescription || `${cleanLabel} ${idCausal}`).trim().toUpperCase();
 
     return {
-      id_sistema: `MOV-${product}-${date}`,
+      id_sistema: `MOV-${product}-${date || Date.now()}`,
       contrato: (base ? base[this.colIndexContrato] : '').toString(),
       producto: product,
       cliente: (base ? base[this.colIndexNombre] : '').toString(),
@@ -232,7 +232,7 @@ export class ProcessingEngine {
   }
 
   private homologateTerreno(row: any): RegistroNormalizado {
-    const product = (this.getFieldValue(row, ["PRODUCTO", "CUENTA", "SUSCRIPTOR"]) || '').toString().trim().replace(/\.0$/, '');
+    const product = (this.getFieldValue(row, ["PRODUCTO", "CUENTA", "SUSCRIPTOR", "CONTRATO"]) || '').toString().trim().replace(/\.0$/, '');
     const base = this.baseGeneral.get(product);
     const date = this.extractDateFromRow(row) || '';
     let motivoNP = (this.getFieldValue(row, ["MOTIVO DE NO PAGO ", "MOTIVO"]) || '').toString().trim();
@@ -245,7 +245,7 @@ export class ProcessingEngine {
     const motivoCVS = (mappedMotDescription || `${cleanLabel} ${codeM}`).trim().toUpperCase();
 
     return {
-      id_sistema: `TER-${product}-${date}`,
+      id_sistema: `TER-${product}-${date || Date.now()}`,
       contrato: (base ? base[this.colIndexContrato] : '').toString(),
       producto: product,
       cliente: (base ? base[this.colIndexNombre] : '').toString(),
@@ -282,21 +282,27 @@ export class ProcessingEngine {
 
     movilidadData.forEach(row => {
       if (!row) return;
-      const product = (this.getFieldValue(row, ["Producto", "CUENTA"]) || '').toString().trim().replace(/\.0$/, '');
+      const product = (this.getFieldValue(row, ["Producto", "CUENTA", "SUSCRIPTOR", "CONTRATO"]) || '').toString().trim().replace(/\.0$/, '');
+      if (!product || product === '0') return;
+
       const date = this.extractDateFromRow(row);
-      if (!product || product === '0' || !date) return;
-      if (start && date < start) return;
-      if (end && date > end) return;
+      // FILTRO FLEXIBLE: Si hay rango de fechas, filtrar. Si no hay rango, incluir TODO.
+      if (start && date && date < start) return;
+      if (end && date && date > end) return;
+      
       addOrUpdate(this.homologateMovilidad(row));
     });
 
     terrenoData.forEach(row => {
       if (!row) return;
-      const product = (this.getFieldValue(row, ["PRODUCTO", "CUENTA"]) || '').toString().trim().replace(/\.0$/, '');
+      const product = (this.getFieldValue(row, ["PRODUCTO", "CUENTA", "SUSCRIPTOR", "CONTRATO"]) || '').toString().trim().replace(/\.0$/, '');
+      if (!product || product === '0') return;
+
       const date = this.extractDateFromRow(row);
-      if (!product || product === '0' || !date) return;
-      if (start && date < start) return;
-      if (end && date > end) return;
+      // FILTRO FLEXIBLE
+      if (start && date && date < start) return;
+      if (end && date && date > end) return;
+      
       addOrUpdate(this.homologateTerreno(row));
     });
 
