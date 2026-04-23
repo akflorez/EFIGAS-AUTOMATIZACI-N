@@ -9,6 +9,10 @@ export class ProcessingEngine {
   private terMotivoToPerfilMap: Map<string, string> = new Map();
   private terMotivoToCVSMap: Map<string, string> = new Map();
   private terMotivoToCodeMap: Map<string, string> = new Map();
+  private colIndexCedula: number = 14;   // Default O (14)
+  private colIndexNombre: number = 2;    // Default C (2)
+  private colIndexDireccion: number = 5; // Default F (5)
+  private colIndexContrato: number = 1;  // Default B (1)
   
   constructor() {
   }
@@ -45,16 +49,24 @@ export class ProcessingEngine {
     const total = data.length;
     if (total === 0) { onProgress(100); return; }
     
-    // Auto-detección de Header: Si la primera fila es "Unnamed" o similar, 
-    // buscamos una fila de datos que pueda servir de mapeo si las llaves originales no sirven.
-    // Pero en JS, sheet_to_json ya fijó las llaves. Si las llaves son 'Unnamed: 0', 
-    // intentaremos buscar los valores reales en las primeras 10 filas para re-mapear.
+    // 1. Detect Header and Map Column Indexes
     let headerRowIndex = -1;
-    const sampleSize = Math.min(data.length, 20);
-    for (let i = 0; i < sampleSize; i++) {
-      const vals = Object.values(data[i]).map(v => this.normalizeText(v?.toString() || ""));
-      if (vals.includes('producto') || vals.includes('contrato') || (vals.includes('cuenta') && vals.includes('nombre'))) {
+    // Buscamos en las primeras 10 filas el encabezado
+    for (let i = 0; i < Math.min(data.length, 10); i++) {
+      const row = data[i];
+      if (!row || !Array.isArray(row)) continue;
+      
+      const rowStr = row.map(v => this.normalizeText(v?.toString() || ""));
+      if (rowStr.includes('producto') || rowStr.includes('contrato') || rowStr.includes('nombre')) {
         headerRowIndex = i;
+        
+        // Mapear índices dinámicamente
+        rowStr.forEach((val, idx) => {
+          if (val === 'cedula' || val === 'identificacion' || val === 'documento') this.colIndexCedula = idx;
+          if (val === 'nombre' || val === 'cliente') this.colIndexNombre = idx;
+          if (val === 'direccion' || val === 'domicilio') this.colIndexDireccion = idx;
+          if (val === 'contrato') this.colIndexContrato = idx;
+        });
         break;
       }
     }
@@ -68,19 +80,16 @@ export class ProcessingEngine {
 
         let key = '';
         if (headerRowIndex !== -1) {
-          // Si detectamos un header interno, los datos de 'row' actuales tienen llaves tipo 'Unnamed'
-          // Pero los valores de la fila 'headerRowIndex' nos dicen qué es cada cosa.
-          const headerValues = data[headerRowIndex];
-          const keys = Object.keys(row);
-          for (const k of keys) {
-            const hVal = this.normalizeText(headerValues[k]?.toString() || "");
-            if (hVal === 'producto' || hVal === 'cuenta') {
-              key = (row[k] || '').toString().trim();
-              break;
-            }
-          }
+          // Buscamos el producto/cuenta según el header detectado
+          const headerRow = data[headerRowIndex];
+          const prodIdx = (headerRow as any).findIndex((h: any) => {
+             const nh = this.normalizeText(h?.toString() || "");
+             return nh === 'producto' || nh === 'cuenta';
+          });
+          if (prodIdx !== -1) key = (row[prodIdx] || '').toString().trim();
+          else key = (row[1] || '').toString().trim(); // Fallback a B
         } else {
-          key = (this.getFieldValue(row, ["PRODUCTO", "CUENTA"]) || '').toString().trim();
+          key = (row[1] || '').toString().trim(); // Default B
         }
 
         if (key) this.baseGeneral.set(key, row);
@@ -288,10 +297,10 @@ export class ProcessingEngine {
 
     return {
       id_sistema: `MOV-${product}-${Date.now()}`,
-      contrato: (this.getFieldValue(base, ["CONTRATO"]) || '').toString(),
+      contrato: (base ? base[this.colIndexContrato] : '').toString(),
       producto: product,
-      cliente: (this.getFieldValue(base, ["NOMBRE"]) || '').toString(),
-      direccion: (this.getFieldValue(base, ["DIRECCION"]) || '').toString(),
+      cliente: (base ? base[this.colIndexNombre] : '').toString(),
+      direccion: (base ? base[this.colIndexDireccion] : '').toString(),
       causal: observacion.toUpperCase(), // Gestión = Observación pura
       codigo_causal: mappedMotCode, // CORRECCIÓN: Usar código de no pago
       tipo_comentario: '',
@@ -305,7 +314,7 @@ export class ProcessingEngine {
       fuente_principal: 'movilidad',
       identificacion_valida: !!base,
       perfil_maestro: perfil,
-      cedula_maestra: (this.getFieldValue(base, ["CEDULA", "CEDULA "]) || (base ? Object.values(base)[14] : '') || '').toString(),
+      cedula_maestra: (base ? base[this.colIndexCedula] : '').toString(),
       telefono_maestro: (this.getFieldValue(row, ["celular de la persona que atendió", "Celular de persona que atendió", "celular persona que atendio", "Celular de la persona que atendio", "celular personal", "celular_personal", "numero marca", "numero de celular", "celular", "telefono", "numero contacto", "telefono nuevo para el cvs"]) || '').toString(),
       comentarios_concatenados: comments
     };
@@ -346,11 +355,11 @@ export class ProcessingEngine {
 
     return {
       id_sistema: `TER-${product}-${Date.now()}`,
-      contrato: (this.getFieldValue(base, ["CONTRATO"]) || this.getFieldValue(row, ["CONTRATO"]) || '').toString(),
+      contrato: (base ? base[this.colIndexContrato] : (this.getFieldValue(row, ["CONTRATO"]) || '')).toString(),
       producto: product,
-      cliente: (this.getFieldValue(base, ["NOMBRE"]) || '').toString(),
-      direccion: (this.getFieldValue(base, ["DIRECCION"]) || '').toString(),
-      cedula_maestra: (this.getFieldValue(base, ["CEDULA", "CEDULA "]) || (base ? Object.values(base)[14] : '') || '').toString(),
+      cliente: (base ? base[this.colIndexNombre] : '').toString(),
+      direccion: (base ? base[this.colIndexDireccion] : '').toString(),
+      cedula_maestra: (base ? base[this.colIndexCedula] : '').toString(),
       telefono_maestro: (this.getFieldValue(row, ["telefono nuevo para el cvs", "telefono nuevo", "nuevo_telefono", "telefono_nuevo", "nuevo telefono", "celular de la persona que atendió", "Celular de persona que atendió", "celular nuevo", "numero marcar", "telefono adicional", "celular", "telefono", "numero adicional"]) || '').toString(),
       causal: observacion.toUpperCase(), // Gestión = Observación pura
       codigo_causal: mappedMotCode, // CORRECCIÓN: Usar código de no pago
