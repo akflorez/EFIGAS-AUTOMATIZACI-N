@@ -298,8 +298,6 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     document.body.removeChild(link);
   };
 
-  // exportAnomalias removed in v34
-
   return (
     <div className="flex min-h-screen bg-slate-50 font-sans">
       {/* Overlay de procesamiento para Reporte */}
@@ -672,26 +670,32 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                       <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-8">
                          <div className="flex-1">
                             <h4 className="text-xl font-black mb-2 tracking-tight">¿Todo listo para generar?</h4>
-                            <p className="text-slate-400 text-sm font-medium">Se procesarán {files.master.secondaryData?.length || 0} registros de la Base General. Se respetarán fórmulas y formatos originales de EMDECOB.</p>
+                            <p className="text-slate-400 text-sm font-medium">Se procesarán {resultados.length} registros gestionados (unión Movilidad + Terreno). Se respetarán fórmulas originales.</p>
                          </div>
                          <button 
                            onClick={async () => {
                               if (!files.master.loaded) return alert('Debe cargar el archivo Master primero.');
+                              if (resultados.length === 0) return alert('No hay registros gestionados hoy. Por favor, procesa los datos en "Visitas Terreno" primero.');
+                              
                               setProcessing(true);
                               setProgress(10);
-                              setStatusMessage('Inicializando exceljs y cargando plantilla...');
+                              setStatusMessage('Filtrando datos gestionados...');
                               
                               try {
                                  const engine = new ReportEngine();
                                  const templateUrl = '/templates/plantilla_gestion.xlsx';
                                  
-                                 setStatusMessage('Mapeando datos a la plantilla (B:BI -> A:BH)...');
+                                 setStatusMessage(`Generando informe para ${resultados.length} gestiones...`);
                                  setProgress(30);
+                                 
+                                 // Pasamos los IDs de productos gestionados para que el motor filtre la Base General
+                                 const filterSet = new Set(resultados.map(r => r.producto));
                                  
                                  const result = await engine.generateReport(
                                     files.master.secondaryData || [],
                                     files.master.data || [],
-                                    templateUrl
+                                    templateUrl,
+                                    filterSet
                                  );
                                  
                                  setProgress(90);
@@ -706,7 +710,6 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                                  link.click();
                                  document.body.removeChild(link);
 
-                                 // 2. Descargar TXT de Comentarios Masivos
                                  if (result.txtContent) {
                                    const dateStr = new Date().toISOString().split('T')[0];
                                    const txtBlob = new Blob([result.txtContent], { type: 'text/plain;charset=utf-8' });

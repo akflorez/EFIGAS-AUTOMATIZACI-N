@@ -6,8 +6,9 @@ export class ReportEngine {
    * @param baseGeneralRaw Array of arrays from BASE GENERAL sheet (using header: 1)
    * @param convRaw Array of arrays from CONV sheet (using header: 1)
    * @param templateUrl URL or path to the template file
+   * @param filterIds Optional Set of products/accounts to filter the report
    */
-  public async generateReport(baseGeneralRaw: any[][], _convRaw: any[][], templateUrl: string): Promise<any> {
+  public async generateReport(baseGeneralRaw: any[][], _convRaw: any[][], templateUrl: string, filterIds?: Set<string>): Promise<any> {
     const workbook = new ExcelJS.Workbook();
     
     // 1. Load Template
@@ -39,17 +40,28 @@ export class ReportEngine {
         row.getCell(1).value = null;
         row.getCell(2).value = null;
         row.getCell(3).value = null;
-        // NOT clearing Cell 4 to preserve formula if it exists
+        row.getCell(4).value = null; // Clear old text to be safe
       }
     }
 
     // 4. Process and Sync Sheets (Single Loop)
     let txtContent = '';
+    let processedCount = 0;
     
     // We skip headers in baseGeneralRaw (index 0)
     for (let i = 1; i < baseGeneralRaw.length; i++) {
       const baseRow = baseGeneralRaw[i];
-      const templateRowNumber = 8 + (i - 1);
+      
+      // FILTRO: Solo si el producto está en la lista de resultados gestionados
+      if (filterIds && filterIds.size > 0) {
+         // Intentar buscar el producto. Suele estar en índice 2 (Col C) o similar.
+         // En el engine v46, el producto se extrae de la base general.
+         const product = (baseRow[2] || '').toString().trim();
+         if (!filterIds.has(product)) continue;
+      }
+
+      const templateRowNumber = 8 + processedCount;
+      processedCount++;
       const targetRow = targetSheet.getRow(templateRowNumber);
 
       // --- Main Mapping: Base B:BI (indices 1-60) -> Template A:BH (indices 1-60) ---
@@ -93,7 +105,7 @@ export class ReportEngine {
 
       // --- Sync to COMENTARIOS MASIVO ---
       if (commentsSheet) {
-        const commentRow = commentsSheet.getRow(3 + (i - 1));
+        const commentRow = commentsSheet.getRow(3 + (processedCount - 1));
         const orden = targetRow.getCell(7).value;
         const codigo = targetRow.getCell(67).value; // BO
         const observacion = targetRow.getCell(70).value; // BR
@@ -109,7 +121,7 @@ export class ReportEngine {
            const cleanObs = (observacion?.toString() || '').trim();
            commentRow.getCell(4).value = `${cleanO} // ${cleanC} // ${cleanObs}`;
         }
-        
+
         commentRow.commit();
 
         // --- Sync to TXT Content ---
