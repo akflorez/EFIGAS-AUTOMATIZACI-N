@@ -12,7 +12,6 @@ export class ProcessingEngine {
   private colIndexDireccion: number = 5; 
   private colIndexContrato: number = 1;  
   
-  // Contadores para diagnóstico
   public stats = {
     movTotal: 0,
     movConCausal: 0,
@@ -76,7 +75,7 @@ export class ProcessingEngine {
       for (let j = i; j < end; j++) {
         if (j <= headerRowIndex) continue;
         const row = rawData[j];
-        if (!row || !Array.isArray(row) || row.length < 2) continue;
+        if (!row || !Array.isArray(row)) continue;
         let key = '';
         if (headerRowIndex !== -1) {
           const headerRow = rawData[headerRowIndex];
@@ -148,6 +147,7 @@ export class ProcessingEngine {
       }
     }
     if (!date || isNaN(date.getTime())) return '';
+    // CORRECCIÓN: Padding de día y mes para que coincida con el input date (YYYY-MM-DD)
     return `${date.getFullYear()}-${(date.getMonth() + 1).toString().padStart(2, '0')}-${date.getDate().toString().padStart(2, '0')}`;
   }
 
@@ -174,7 +174,6 @@ export class ProcessingEngine {
     if (!productFound) return null as any;
     const product = this.safeString(productFound).replace(/\.0$/, '');
 
-    // Filtro de Causal Flexibilizado (mínimo 1 letra)
     const causalRaw = this.safeString(this.getFieldValue(row, ["Causal", "Motivo", "Causales"]));
     if (!causalRaw || causalRaw === '0' || causalRaw === '-' || causalRaw.length < 1) return null as any;
     
@@ -273,8 +272,10 @@ export class ProcessingEngine {
     const processRegistry = (registro: RegistroNormalizado) => {
       if (!registro) return;
       
-      // FILTRO DE FECHA: Solo si el usuario seleccionó un rango.
-      if (start || end) {
+      // LOGICA SELECTIVA:
+      // Movilidad pasa completo (siempre que tenga causal).
+      // Terreno debe cumplir estrictamente el filtro de fecha si este se selecciona.
+      if (registro.fuente_principal === 'terreno' && (start || end)) {
         if (!registro.fecha_gestion) return; 
         if (start && registro.fecha_gestion < start) return;
         if (end && registro.fecha_gestion > end) return;
