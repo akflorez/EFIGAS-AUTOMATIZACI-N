@@ -106,11 +106,32 @@ export class ProcessingEngine {
     this.terMotivoToCVSMap.clear();
     this.terMotivoToCodeMap.clear();
 
+    if (!maestroData || maestroData.length === 0) return;
+
     maestroData.forEach(row => {
-      // Mapeos de Terreno (Busca por Código o por Texto Normalizado)
-      const label = this.getFieldValue(row, ['CAUSAL', 'Causal', 'MOTIVO', 'Motivo', 'DESCRIPCION', 'Descripción']);
-      const perVal = this.getFieldValue(row, ['MEJOR PERFIL EN CVS', 'PERFIL CVS', 'PERFIL', 'Perfil', 'PERFIL_CVS']);
-      const motVal = this.getFieldValue(row, ['MOTIVO DE NO PAGO CVS', 'MOTIVO CVS', 'MOTIVO_NO_PAGO_CVS', 'MOTIVO_CVS', 'MOTIVO NO PAGO']);
+      // 1. Identificar columnas dinámicamente por contenido si los nombres fallan
+      const keys = Object.keys(row);
+      let label = this.getFieldValue(row, ['CAUSAL', 'MOTIVO', 'DESCRIPCION']);
+      let perVal = this.getFieldValue(row, ['MEJOR PERFIL EN CVS', 'PERFIL CVS', 'PERFIL']);
+      let motVal = this.getFieldValue(row, ['MOTIVO DE NO PAGO CVS', 'MOTIVO CVS', 'MOTIVO_NO_PAGO_CVS']);
+
+      // Heurística: Si no encontró columnas por nombre, buscar por contenido
+      if (!label || !perVal || !motVal) {
+        for (const k of keys) {
+          const val = (row[k] || '').toString();
+          const nk = k.toUpperCase().trim();
+          
+          if (!label && (nk.includes('CAUSAL') || nk.includes('MOTIVO') || nk.includes('CONV') || this.extractCode(val))) {
+            label = val;
+          }
+          if (!perVal && (nk.includes('PERFIL') || nk.includes('CVS') || nk.includes('MEJOR'))) {
+            perVal = val;
+          }
+          if (!motVal && (nk.includes('MOTIVO') && nk.includes('CVS'))) {
+            motVal = val;
+          }
+        }
+      }
 
       if (label) {
         const labelStr = label.toString();
@@ -120,20 +141,16 @@ export class ProcessingEngine {
         const per = (perVal || '').toString().trim().toUpperCase();
         const mot = (motVal || '').toString().trim().toUpperCase();
 
-        // 1. Indexar por Código (Ej: "9136")
+        // Indexar por todo lo posible
         if (code) {
           if (per) this.movCausalToPerfilMap.set(code, per);
           if (mot) this.terMotivoToCVSMap.set(code, mot);
           this.terMotivoToCodeMap.set(code, code);
         }
-        
-        // 2. Indexar por Texto Limpio (Ej: "nadienelpredio")
         if (textOnlyNormalized) {
           if (per) this.movCausalToPerfilMap.set(textOnlyNormalized, per);
           if (mot) this.terMotivoToCVSMap.set(textOnlyNormalized, mot);
         }
-
-        // 3. Indexar por Texto Completo Normalizado (Ej: "9136nadienelpredio")
         if (fullNormalized) {
           if (per && !this.movCausalToPerfilMap.has(fullNormalized)) this.movCausalToPerfilMap.set(fullNormalized, per);
           if (mot && !this.terMotivoToCVSMap.has(fullNormalized)) this.terMotivoToCVSMap.set(fullNormalized, mot);
