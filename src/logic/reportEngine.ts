@@ -101,9 +101,9 @@ export class ReportEngine {
         // A (1): numero de orden ← G (7)
         targetRow.getCell(1).value = sourceRow.getCell(7).value;
         // B (2): codigo de comentario ← BO (67)
-        targetRow.getCell(2).value = sourceRow.getCell(67).value;
+        targetRow.getCell(2).value = sourceRow.getCell('BO').value;
         // C (3): observacion ← BR (70)
-        targetRow.getCell(3).value = sourceRow.getCell(70).value;
+        targetRow.getCell(3).value = sourceRow.getCell('BR').value;
 
         targetRow.commit();
       }
@@ -114,10 +114,10 @@ export class ReportEngine {
     if (commentsSheet) {
       for (let i = 0; i < baseGeneralRaw.length - 1; i++) {
         const sourceRow = targetSheet.getRow(8 + i);
-        // A (1): Orden, B (2): Código, C (3): Observación
+        // Usar los valores ya mapeados en la fila del informe
         const orden = sourceRow.getCell(7).value?.toString() || '';
-        const codigo = targetSheet.getRow(8 + i).getCell(67).value?.toString() || '';
-        const observacion = targetSheet.getRow(8 + i).getCell(70).value?.toString() || '';
+        const codigo = sourceRow.getCell('BO').value?.toString() || '';
+        const observacion = sourceRow.getCell('BR').value?.toString() || '';
 
         if (orden) {
           // Limpieza solicitada: eliminar {}, " y usar //
