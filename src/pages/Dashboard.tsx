@@ -145,7 +145,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           {!isSidebarCollapsed && <p className="px-4 text-[10px] font-black text-white/30 uppercase tracking-widest mb-4">Herramientas</p>}
           <NavItem active={activeTab === 'procesar'} onClick={() => setActiveTab('procesar')} icon={<Map size={20} />} label="Visitas Terreno" collapsed={isSidebarCollapsed} />
           <NavItem active={activeTab === 'reporte'} onClick={() => setActiveTab('reporte')} icon={<FileCheck size={20} />} label="Informe Gestión" collapsed={isSidebarCollapsed} />
-          <NavItem active={activeTab === 'legalizacion'} onClick={() => setActiveTab('legalizacion'} icon={<CircleDollarSign size={20} />} label="Legalizaciones" collapsed={isSidebarCollapsed} />
+          <NavItem active={activeTab === 'legalizacion'} onClick={() => setActiveTab('legalizacion')} icon={<CircleDollarSign size={20} />} label="Legalizaciones" collapsed={isSidebarCollapsed} />
         </nav>
 
         <div className="mt-auto pt-6 border-t border-white/5">
@@ -155,7 +155,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
       <main className={`flex-1 ${isSidebarCollapsed ? 'ml-20' : 'ml-72'} p-10 transition-all duration-300`}>
         <header className="flex justify-between items-center mb-10">
-          <div><h2 className="text-3xl font-black text-slate-900 tracking-tight">Efigas Dashboard v46.10.4</h2><p className="text-emerald-600 font-bold text-sm">Motor Lógica Selectiva Activo</p></div>
+          <div><h2 className="text-3xl font-black text-slate-900 tracking-tight">Efigas Dashboard v46.10.5</h2><p className="text-emerald-600 font-bold text-sm">Motor Lógica Selectiva Activo</p></div>
           <div className="flex items-center gap-4 bg-white p-2 pr-5 rounded-2xl shadow-sm border border-slate-100">
              <div className="w-10 h-10 bg-slate-100 rounded-xl flex items-center justify-center text-slate-500"><UserIcon size={20} /></div>
              <div className="leading-none text-left"><p className="text-[10px] font-black text-slate-400 uppercase mb-1">Operador Senior</p><p className="text-sm font-black text-slate-800">Efigas User</p></div>
