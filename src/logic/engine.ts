@@ -113,28 +113,30 @@ export class ProcessingEngine {
       const motVal = this.getFieldValue(row, ['MOTIVO DE NO PAGO CVS', 'MOTIVO CVS', 'MOTIVO_NO_PAGO_CVS', 'MOTIVO_CVS', 'MOTIVO NO PAGO']);
 
       if (label) {
-        const code = this.extractCode(label.toString());
-        const text = this.normalizeText(label.toString());
+        const labelStr = label.toString();
+        const code = this.extractCode(labelStr);
+        const textOnlyNormalized = this.normalizeText(labelStr.replace(code, ''));
+        const fullNormalized = this.normalizeText(labelStr);
         const per = (perVal || '').toString().trim().toUpperCase();
         const mot = (motVal || '').toString().trim().toUpperCase();
 
+        // 1. Indexar por Código (Ej: "9136")
         if (code) {
           if (per) this.movCausalToPerfilMap.set(code, per);
           if (mot) this.terMotivoToCVSMap.set(code, mot);
           this.terMotivoToCodeMap.set(code, code);
         }
-        if (text) {
-          if (per) {
-            this.movCausalToPerfilMap.set(text, per);
-            // Indexar también por palabras clave largas para mejorar matches parciales
-            const words = text.split(' ').filter(w => w.length > 5);
-            words.forEach(w => {
-              if (!this.movCausalToPerfilMap.has(w)) this.movCausalToPerfilMap.set(w, per);
-            });
-          }
-          if (mot) this.terMotivoToCVSMap.set(text, mot);
-          const rawCode = this.extractCode(label.toString());
-          if (rawCode) this.terMotivoToCodeMap.set(text, rawCode);
+        
+        // 2. Indexar por Texto Limpio (Ej: "nadienelpredio")
+        if (textOnlyNormalized) {
+          if (per) this.movCausalToPerfilMap.set(textOnlyNormalized, per);
+          if (mot) this.terMotivoToCVSMap.set(textOnlyNormalized, mot);
+        }
+
+        // 3. Indexar por Texto Completo Normalizado (Ej: "9136nadienelpredio")
+        if (fullNormalized) {
+          if (per && !this.movCausalToPerfilMap.has(fullNormalized)) this.movCausalToPerfilMap.set(fullNormalized, per);
+          if (mot && !this.terMotivoToCVSMap.has(fullNormalized)) this.terMotivoToCVSMap.set(fullNormalized, mot);
         }
       }
     });
@@ -284,15 +286,16 @@ export class ProcessingEngine {
     const observacion = (this.getFieldValue(row, ["Observación", "Observacion"]) || '').toString().trim();
     
     const idCausal = this.extractCode(causalRaw);
-    const causalLabel = causalRaw.replace(idCausal, '').replace(/^[- ]+/, '').trim().toUpperCase();
     const normText = this.normalizeText(causalRaw.replace(idCausal, ''));
+    const fullNorm = this.normalizeText(causalRaw);
+    const causalLabel = causalRaw.replace(idCausal, '').replace(/^[- ]+/, '').trim().toUpperCase();
     
     // Perfil Movilidad: Tomar DIRECTAMENTE de la causal (sin cruce con maestro)
     let perfil = (causalLabel || '').toString().replace(/\d+/g, '').replace(/^[-\s]+/, '').trim().toUpperCase() || 'REVISIÓN MANUAL';
     
-    // Motivo de No Pago: BUSCARV hacia "MOTIVO DE NO PAGO CVS" en el maestro
-    const mappedMotDescription = this.terMotivoToCVSMap.get(idCausal) || this.terMotivoToCVSMap.get(normText);
-    const mappedMotCode = idCausal || this.terMotivoToCodeMap.get(normText) || '';
+    // Motivo de No Pago: BUSCARV con triple chequeo (Código, Full, Texto)
+    const mappedMotDescription = this.terMotivoToCVSMap.get(idCausal) || this.terMotivoToCVSMap.get(fullNorm) || this.terMotivoToCVSMap.get(normText);
+    const mappedMotCode = idCausal || this.terMotivoToCodeMap.get(fullNorm) || this.terMotivoToCodeMap.get(normText) || '';
     const cleanLabel = causalRaw.replace(idCausal, '').replace(/^[-\s]+/, '').trim().toUpperCase();
     
     // Si lo encontró en el maestro, usamos esa descripción oficial. Si no, lo que traía + código.
@@ -341,23 +344,14 @@ export class ProcessingEngine {
 
     const codeM = this.extractCode(motivoNP);
     const normM = this.normalizeText(motivoNP.replace(codeM, ''));
+    const fullNormM = this.normalizeText(motivoNP);
 
-    // Perfil Terreno: SÍ cruzado con el maestro
-    let perfil = this.movCausalToPerfilMap.get(codeM) || this.movCausalToPerfilMap.get(normM);
+    // Perfil Terreno: SÍ cruzado con el maestro con triple chequeo
+    let perfil = this.movCausalToPerfilMap.get(codeM) || this.movCausalToPerfilMap.get(fullNormM) || this.movCausalToPerfilMap.get(normM);
     
-    // Mejora: Si no hay perfil en el mapa, intentamos extraer palabras clave del motivo
-    if (!perfil && normM) {
-      const words = normM.split(' ').filter(w => w.length > 4); 
-      for (const word of words) {
-        if (this.movCausalToPerfilMap.has(word)) {
-          perfil = this.movCausalToPerfilMap.get(word);
-          break;
-        }
-      }
-    }
     // Motivo Terreno: BUSCARV hacia "MOTIVO DE NO PAGO CVS" en el maestro
-    const mappedMotDescription = this.terMotivoToCVSMap.get(codeM) || this.terMotivoToCVSMap.get(normM);
-    const mappedMotCode = codeM || this.terMotivoToCodeMap.get(normM) || '';
+    const mappedMotDescription = this.terMotivoToCVSMap.get(codeM) || this.terMotivoToCVSMap.get(fullNormM) || this.terMotivoToCVSMap.get(normM);
+    const mappedMotCode = codeM || this.terMotivoToCodeMap.get(fullNormM) || this.terMotivoToCodeMap.get(normM) || '';
     const cleanLabel = motivoNP.replace(codeM, '').replace(/^[-\s]+/, '').trim().toUpperCase();
     
     // Si lo encontró en el maestro, usamos esa descripción oficial. Si no, lo que traía + código.
