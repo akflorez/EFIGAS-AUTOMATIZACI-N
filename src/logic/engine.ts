@@ -290,10 +290,13 @@ export class ProcessingEngine {
     // Perfil Movilidad: Tomar DIRECTAMENTE de la causal (sin cruce con maestro)
     let perfil = (causalLabel || '').toString().replace(/\d+/g, '').replace(/^[-\s]+/, '').trim().toUpperCase() || 'REVISIÓN MANUAL';
     
-    // Motivo de No Pago: Priorizar código del archivo, si no, buscar en maestro
+    // Motivo de No Pago: BUSCARV hacia "MOTIVO DE NO PAGO CVS" en el maestro
+    const mappedMotDescription = this.terMotivoToCVSMap.get(idCausal) || this.terMotivoToCVSMap.get(normText);
     const mappedMotCode = idCausal || this.terMotivoToCodeMap.get(normText) || '';
     const cleanLabel = causalRaw.replace(idCausal, '').replace(/^[-\s]+/, '').trim().toUpperCase();
-    const motivoNP = `${cleanLabel} ${mappedMotCode}`.trim().toUpperCase();
+    
+    // Si lo encontró en el maestro, usamos esa descripción oficial. Si no, lo que traía + código.
+    const motivoNP = (mappedMotDescription || `${cleanLabel} ${mappedMotCode}`).trim().toUpperCase();
 
     let error = '';
     if (!product) error = 'Producto/Cuenta vacío en archivo. ';
@@ -352,10 +355,13 @@ export class ProcessingEngine {
         }
       }
     }
-    // Motivo Terreno: Priorizar código del archivo, si no, buscar en maestro
+    // Motivo Terreno: BUSCARV hacia "MOTIVO DE NO PAGO CVS" en el maestro
+    const mappedMotDescription = this.terMotivoToCVSMap.get(codeM) || this.terMotivoToCVSMap.get(normM);
     const mappedMotCode = codeM || this.terMotivoToCodeMap.get(normM) || '';
     const cleanLabel = motivoNP.replace(codeM, '').replace(/^[-\s]+/, '').trim().toUpperCase();
-    const motivoCVS = `${cleanLabel} ${mappedMotCode}`.trim().toUpperCase();
+    
+    // Si lo encontró en el maestro, usamos esa descripción oficial. Si no, lo que traía + código.
+    const motivoCVS = (mappedMotDescription || `${cleanLabel} ${mappedMotCode}`).trim().toUpperCase();
 
     // Perfil Terreno: CRUCE OBLIGATORIO con Maestro (CONV)
     let perfilFound = perfil; // 'perfil' ya viene del mapeo arriba
