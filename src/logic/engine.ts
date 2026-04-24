@@ -6,10 +6,10 @@ export class ProcessingEngine {
   private baseGeneral: Map<string, any[]> = new Map();
   private movCausalToPerfilMap: Map<string, string> = new Map();
   
-  private colIdxContrato = -1;
-  private colIdxProducto = -1;
-  private colIdxCedula = 14; 
-  private colIdxNombre = -1;
+  private colIdxContrato = 4; // Columna E
+  private colIdxProducto = 5; // Columna F
+  private colIdxCedula = 14;  // Columna O
+  private colIdxNombre = 13;  // Columna N
 
   public stats = {
     movTotal: 0, movConCausal: 0, movEnFecha: 0,
@@ -44,9 +44,10 @@ export class ProcessingEngine {
                 const pure = val.replace(/\s+/g, '');
                 if (pure.includes('contrato')) this.colIdxContrato = idx;
                 if (pure.includes('producto') || pure.includes('cuenta')) this.colIdxProducto = idx;
-                if (pure.includes('cedula') || pure.includes('identificacion') || idx === 14) this.colIdxCedula = idx;
+                if (pure.includes('cedula') || pure.includes('identificacion')) this.colIdxCedula = idx;
                 if (pure.includes('nombre') || pure.includes('cliente')) this.colIdxNombre = idx;
             });
+            // Si después de buscar, los índices siguen siendo por defecto o no se encontraron, se mantienen los fijos (5 y 14)
             break;
         }
     }
