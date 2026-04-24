@@ -104,6 +104,18 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     } catch(e: any) { alert('Error: ' + e.message); setProcessing(false); }
   };
 
+  const removeFile = (type: keyof DashboardFiles) => {
+    setFiles(prev => ({ ...prev, [type]: { loaded: false, name: '', data: [], secondaryData: type === 'master' ? [] : undefined } }));
+  };
+
+  const exportCSV = () => {
+    if (!resultados.length) return;
+    const ws = XLSX.utils.json_to_sheet(new ProcessingEngine().createExportData(resultados));
+    const csv = XLSX.utils.sheet_to_csv(ws, { FS: ";" });
+    const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = 'visitas_efigas.csv'; link.click();
+  };
+
   return (
     <div className="flex min-h-screen bg-[#f8fafc] font-sans text-slate-900">
       {/* Sidebar - Diseño Premium Original */}
