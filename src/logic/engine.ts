@@ -190,8 +190,9 @@ export class ProcessingEngine {
     const perfilFromMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(normCausal);
     const perfil = (perfilFromMaestro || cleanLabel || 'REVISIÓN MANUAL').toString().toUpperCase().trim();
     
-    const mappedMotDescription = this.terMotivoToCVSMap.get(idCausal) || this.terMotivoToCVSMap.get(normCausal);
-    const motivoNP = (mappedMotDescription || cleanLabel).trim().toUpperCase();
+    // El motivo no pago en Movilidad es la concatenación de comentarios + código al final
+    const obsLarga = this.consolidateMovilidadComments(row);
+    const motivoNP = `${obsLarga} ${idCausal}`.trim().toUpperCase();
 
     return {
       id_sistema: `MOV-${product}-${Math.random()}`,
@@ -236,9 +237,10 @@ export class ProcessingEngine {
     const normM = this.normalizeText(motivoRaw);
     const perfilRaw = this.movCausalToPerfilMap.get(codeM) || this.movCausalToPerfilMap.get(normM) || '';
     const perfil = (perfilRaw || 'REVISIÓN MANUAL').toString().toUpperCase().trim();
-    const mappedMotDescription = this.terMotivoToCVSMap.get(codeM) || this.terMotivoToCVSMap.get(normM);
     const cleanLabel = motivoRaw.replace(codeM, '').replace(/^[-\s]+/, '').trim().toUpperCase();
-    const motivoCVS = (mappedMotDescription || cleanLabel).trim().toUpperCase();
+    // En Terreno el Motivo NP se queda como estaba (usando el mapeo del maestro si existe)
+    const mappedMotDescription = this.terMotivoToCVSMap.get(codeM) || this.terMotivoToCVSMap.get(normM);
+    const motivoCVS = (mappedMotDescription || `${cleanLabel} ${codeM}`).trim().toUpperCase();
     const obs = this.safeString(this.getFieldValue(row, ["OBSERVACIONES", "DETALLE", "GESTION"])).toUpperCase();
 
     return {
