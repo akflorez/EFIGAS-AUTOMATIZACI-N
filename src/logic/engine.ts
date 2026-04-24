@@ -10,6 +10,7 @@ export class ProcessingEngine {
   private colIdxContrato = -1;
   private colIdxProducto = -1;
   private colIdxCedula = 14; 
+  private colIdxNombre = -1;
 
   public stats = {
     movTotal: 0, movConCausal: 0, movEnFecha: 0,
@@ -23,12 +24,19 @@ export class ProcessingEngine {
 
   private normalizeProductKey(s: any): string {
     if (!s) return "";
-    // Limpieza radical para llaves de producto
     return s.toString().trim().replace(/\.0$/, '').replace(/^0+/, '');
   }
 
   private safeStr(val: any): string {
     return (val || "").toString().trim();
+  }
+
+  private masterCleanMotivo(val: string): string {
+    if(!val) return "";
+    // Elimina radicalmente GAS, BRILLA, EFIGAS, etc al principio (incluso si tienen espacio antes de la coma)
+    let clean = val.replace(/^(GAS|BRILLA|EFIGAS|SURTIGAS|STG|GASES|EMDECOB)\s*,?\s*/i, "").trim();
+    // Quita comas o guiones sueltos restantes al inicio
+    return clean.replace(/^[\s,.-]+/, '').trim();
   }
 
   public async indexBaseGeneral(data: any[][], _onProgress: any) {
@@ -38,7 +46,6 @@ export class ProcessingEngine {
     for (let i = 0; i < Math.min(data.length, 500); i++) {
         const rowData = data[i] || [];
         const rowStr = rowData.map(v => this.normalize(v));
-        // Detección tolerante a "CONTRA TO" o "PRODUC TO"
         if (rowStr.some(v => v.includes('contrat') || v.includes('product') || v.includes('cuenta') || v.includes('cedula'))) {
             headerIdx = i;
             rowStr.forEach((val, idx) => {
@@ -46,6 +53,7 @@ export class ProcessingEngine {
                 if (pure.includes('contrato')) this.colIdxContrato = idx;
                 if (pure.includes('producto') || pure.includes('cuenta')) this.colIdxProducto = idx;
                 if (pure.includes('cedula') || pure.includes('identificacion') || idx === 14) this.colIdxCedula = idx;
+                if (pure.includes('nombre') || pure.includes('cliente')) this.colIdxNombre = idx;
             });
             break;
         }
@@ -53,19 +61,19 @@ export class ProcessingEngine {
 
     if (this.colIdxCedula === -1) this.colIdxCedula = 14;
     
-    // Indexamos por ambas columnas para asegurar el cruce
     for (let i = headerIdx + 1; i < data.length; i++) {
         const row = data[i];
         if (!row || !Array.isArray(row)) continue;
         
-        if (this.colIdxProducto !== -1) {
-            const keyP = this.normalizeProductKey(row[this.colIdxProducto]);
-            if (keyP) this.baseGeneral.set(keyP, row);
-        }
-        if (this.colIdxContrato !== -1) {
-            const keyC = this.normalizeProductKey(row[this.colIdxContrato]);
-            if (keyC) this.baseGeneral.set(keyC, row);
-        }
+        const possibleKeys = [
+            this.normalizeProductKey(row[this.colIdxProducto]),
+            this.normalizeProductKey(row[this.colIdxContrato]),
+            this.normalizeProductKey(row[0]) // Columna A como último recurso
+        ].filter(k => k.length > 3);
+
+        possibleKeys.forEach(k => {
+            if (!this.baseGeneral.has(k)) this.baseGeneral.set(k, row);
+        });
     }
   }
 
@@ -81,8 +89,6 @@ export class ProcessingEngine {
             this.movCausalToPerfilMap.set(norm, perfil.toUpperCase());
             if (code) this.movCausalToPerfilMap.set(code, perfil.toUpperCase());
           }
-          this.terMotivoToCVSMap.set(norm, motivo.toUpperCase());
-          if (code) this.terMotivoToCVSMap.set(code, motivo.toUpperCase());
       }
     });
   }
@@ -108,10 +114,9 @@ export class ProcessingEngine {
     
     // MOVILIDAD
     if (mov) mov.forEach(row => {
-        const rawProduct = this.safeStr(this.getVal(row, ["Producto", "CUENTA", "CONTRATO", "SUSCRIPTOR"]));
+        const rawProduct = this.safeStr(this.getVal(row, ["Producto", "CUENTA", "CONTRATO"]));
         const productKey = this.normalizeProductKey(rawProduct);
         const causalRaw = this.safeStr(this.getVal(row, ["Causal", "Motivo"]));
-        
         if (!productKey || !causalRaw || causalRaw === '0') return;
 
         const base = this.baseGeneral.get(productKey);
@@ -119,23 +124,23 @@ export class ProcessingEngine {
         const observacion = this.safeStr(this.getVal(row, ["Observacion", "OBSERVACIONES", "DETALLE"])).toUpperCase();
         const telMarcado = this.safeStr(this.getVal(row, ["Celular de persona que atendió", "Celular", "Telefono"]));
 
-        // Motivo Único y Limpio
+        // Motivo Único y Limpio (v14.1)
         const motivoNP = this.collectCleanUniqueMobilityMotive(row);
-        const cleanLabel = causalRaw.replace(idCausal, '').replace(/^[A-Z\s,]+/, '').replace(/^-/, '').trim().toUpperCase();
+        const cleanLabel = this.masterCleanMotivo(causalRaw.replace(idCausal, '').replace(/^-/, '').trim()).toUpperCase();
         const perfilMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(this.normalize(causalRaw));
 
         resultados.push({
             id_sistema: `MOV-${productKey}-${Math.random()}`,
             contrato: base ? this.safeStr(base[this.colIdxContrato]) : '',
             producto: rawProduct.toString().replace(/\.0$/, ''),
-            cliente: base ? this.safeStr(base[this.colIdxProducto + 1] || base[2]) : '',
-            direccion: base ? this.safeStr(base[this.colIdxProducto + 2] || base[3]) : '',
+            cliente: base ? (this.safeStr(base[this.colIdxNombre]) || 'CLIENTE EFIGAS') : '',
+            direccion: base ? this.safeStr(base[this.colIdxNombre + 1] || base[2]) : '',
             cedula_maestra: base ? this.safeStr(base[this.colIdxCedula]) : '',
             telefono_maestro: telMarcado,
             causal: observacion || cleanLabel,
             codigo_causal: idCausal,
             motivo_no_pago_original: causalRaw,
-            motivo_no_pago_consolidado: motivoNP || cleanLabel,
+            motivo_no_pago_consolidado: (motivoNP || cleanLabel || 'SIN MOTIVO').toUpperCase(),
             fecha_gestion: this.formatDate(this.getVal(row, ["Fecha", "Completada"])) || '',
             perfil_maestro: (perfilMaestro || cleanLabel || 'REVISIÓN MANUAL').toUpperCase(),
             identificacion_valida: !!base,
@@ -150,7 +155,7 @@ export class ProcessingEngine {
         const productKey = this.normalizeProductKey(rawProduct);
         const motivoRaw = this.safeStr(this.getVal(row, ["MOTIVO DE NO PAGO", "MOTIVO"]));
         const observacion = this.safeStr(this.getVal(row, ["OBSERVACION", "OBSERVACIONES", "DETALLE"])).toUpperCase();
-        const telMarcado = this.safeStr(this.getVal(row, ["TELEFONO NUEVO", "Telefono", "Numero"]));
+        const telMarcado = this.safeStr(this.getVal(row, ["TELEFONO NUEVO", "Telefono"]));
         const date = this.formatDate(this.getVal(row, ["Timestamp", "Fecha"])) || '';
         
         if (!productKey || !motivoRaw || motivoRaw === '0') return;
@@ -159,21 +164,22 @@ export class ProcessingEngine {
 
         const base = this.baseGeneral.get(productKey);
         const idCausal = this.extractCode(motivoRaw);
-        const cleanCausal = motivoRaw.replace(idCausal, '').replace(/^[-\s,]+/, '').trim().toUpperCase();
+        // Limpieza Terreno (v14.1)
+        const cleanCausal = this.masterCleanMotivo(motivoRaw.replace(idCausal, '').trim()).toUpperCase();
         const perfilMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(this.normalize(motivoRaw));
 
         resultados.push({
             id_sistema: `TER-${productKey}-${Math.random()}`,
             contrato: base ? this.safeStr(base[this.colIdxContrato]) : '',
             producto: rawProduct.toString().replace(/\.0$/, ''),
-            cliente: base ? this.safeStr(base[this.colIdxProducto + 1] || base[2]) : '',
-            direccion: base ? this.safeStr(base[this.colIdxProducto + 2] || base[3]) : '',
+            cliente: base ? (this.safeStr(base[this.colIdxNombre]) || 'CLIENTE EFIGAS') : '',
+            direccion: base ? this.safeStr(base[this.colIdxNombre + 1] || base[2]) : '',
             cedula_maestra: base ? this.safeStr(base[this.colIdxCedula]) : '',
             telefono_maestro: telMarcado,
             causal: observacion || cleanCausal,
             codigo_causal: idCausal,
             motivo_no_pago_original: motivoRaw,
-            motivo_no_pago_consolidado: motivoRaw.toUpperCase(),
+            motivo_no_pago_consolidado: cleanCausal || motivoRaw.toUpperCase(),
             fecha_gestion: date,
             perfil_maestro: (perfilMaestro || 'REVISIÓN MANUAL').toUpperCase(),
             identificacion_valida: !!base,
@@ -192,16 +198,14 @@ export class ProcessingEngine {
         if (nk.includes('tipocomentario') || nk.includes('tipo')) {
             const val = this.safeStr(v);
             if (val.length > 2 && val !== '0' && val !== '-') {
-                // Limpieza agresiva de prefijos como GAS, BRILLA, etc. terminados en coma
-                let clean = val.replace(/^[A-Z,\s]+,\s*/i, '').trim();
+                let clean = this.masterCleanMotivo(val);
                 const match = clean.match(/^(\d+)[-\s]+(.+)$/);
                 if (match) uniqueVals.add(`${match[2].trim()} ${match[1].trim()}`);
-                else uniqueVals.add(clean);
+                else uniqueVals.add(clean.toUpperCase());
             }
         }
     });
-    
-    return Array.from(uniqueVals).join(', ').toUpperCase();
+    return Array.from(uniqueVals).join(', ');
   }
 
   private formatDate(val: any): string {
