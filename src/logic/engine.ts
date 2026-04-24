@@ -1,6 +1,5 @@
 import type { 
-  RegistroNormalizado, 
-  BaseGeneralRaw
+  RegistroNormalizado
 } from '../types';
 
 export class ProcessingEngine {
