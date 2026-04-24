@@ -190,8 +190,6 @@ export class ProcessingEngine {
     const perfilFromMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(normCausal);
     const perfil = (perfilFromMaestro || cleanLabel || 'REVISIÓN MANUAL').toString().toUpperCase().trim();
     
-    // El motivo no pago en Movilidad es la concatenación de comentarios + código al final
-    const obsLarga = this.consolidateMovilidadComments(row);
     const motivoNP = `${obsLarga} ${idCausal}`.trim().toUpperCase();
 
     return {
