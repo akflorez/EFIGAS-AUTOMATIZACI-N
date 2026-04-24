@@ -8,8 +8,7 @@ import { LegalizationEngine } from '../logic/legalizationEngine';
 import { 
   FileCheck, LogOut, ChevronRight,
   User as UserIcon, CircleDollarSign, Map,
-  Database, ClipboardList, AlertCircle, Settings, Play, Download,
-  Layers, Calendar, Edit3
+  Database, Layers, Calendar, Edit3, Download
 } from 'lucide-react';
 
 interface FileStatus {
@@ -17,7 +16,6 @@ interface FileStatus {
   name: string;
   data: any[];
   secondaryData?: any[]; 
-  error?: string;
 }
 
 interface DashboardProps {
@@ -30,7 +28,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [fechaFin, setFechaFin] = useState<string>('');
   const [globalDate, setGlobalDate] = useState<string>('');
   
-  const [files, setFiles] = useState({
+  const [files, setFiles] = useState<{ [key: string]: FileStatus }>({
     movilidad: { loaded: false, name: '', data: [] },
     terreno: { loaded: false, name: '', data: [] },
     master: { loaded: false, name: '', data: [], secondaryData: [] },
@@ -98,9 +96,13 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     const link = document.createElement("a"); link.href = URL.createObjectURL(blob); link.download = 'visitas_efigas.csv'; link.click();
   };
 
+  const download = (data: any, name: string, type: string) => {
+    const blob = new Blob([data], { type });
+    const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = name; link.click();
+  };
+
   return (
     <div className="flex min-h-screen bg-[#f8fafc] font-sans text-slate-900">
-      {/* Sidebar Premium */}
       <aside className={`${isSidebarCollapsed ? 'w-20' : 'w-72'} bg-[#0f172a] text-white flex flex-col p-6 fixed h-full z-20 shadow-2xl transition-all duration-300`}>
         <div className="mb-12 flex justify-between items-center">
           {!isSidebarCollapsed && <div className="flex items-center gap-3"><Layers className="text-emerald-500" size={24} /> <span className="font-black text-xl">EMDECOB</span></div>}
@@ -131,10 +133,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             </div>
 
             <div className="grid grid-cols-4 gap-4">
-               <FileCard title="Movilidad" status={files.movilidad} onUpload={(e)=>handleFileUpload(e,'movilidad')} color="blue" />
-               <FileCard title="Terreno" status={files.terreno} onUpload={(e)=>handleFileUpload(e,'terreno')} color="emerald" />
-               <FileCard title="Master" status={files.master} onUpload={(e)=>handleFileUpload(e,'master')} color="amber" />
-               <FileCard title="Maestro" status={files.maestro} onUpload={(e)=>handleFileUpload(e,'maestro')} color="slate" />
+               <FileCard title="Movilidad" status={files.movilidad} onUpload={(e: any)=>handleFileUpload(e,'movilidad')} color="blue" />
+               <FileCard title="Terreno" status={files.terreno} onUpload={(e: any)=>handleFileUpload(e,'terreno')} color="emerald" />
+               <FileCard title="Master" status={files.master} onUpload={(e: any)=>handleFileUpload(e,'master')} color="amber" />
+               <FileCard title="Maestro" status={files.maestro} onUpload={(e: any)=>handleFileUpload(e,'maestro')} color="slate" />
             </div>
 
             {!resultados.length ? (
@@ -165,7 +167,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         ) : activeTab === 'reporte' ? (
           <div className="animate-in slide-in-from-right-4 duration-500 bg-white p-10 rounded-[3rem] shadow-sm border">
              <div className="flex items-center gap-4 mb-10"><FileCheck size={40} className="text-emerald-500"/> <div><h3 className="text-2xl font-black">Informe de Gestión</h3><p className="text-slate-400">Genera Excel y TXT desde el Master.</p></div></div>
-             <FileCard title="Archivo Master" status={files.master} onUpload={(e)=>handleFileUpload(e,'master')} color="amber" />
+             <FileCard title="Archivo Master" status={files.master} onUpload={(e: any)=>handleFileUpload(e,'master')} color="amber" />
              <button onClick={async ()=>{
                 if(!files.master.loaded) return alert('Carga el Master');
                 setProcessing(true); setStatusMessage('Generando...');
@@ -182,10 +184,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
              <h3 className="text-2xl font-black mb-8 flex items-center gap-4"><CircleDollarSign size={32} className="text-amber-500"/> Legalizaciones</h3>
              <div className="grid grid-cols-4 gap-2 mb-8">
                 {['1367','1368','1369','TODOS'].map(t=>(
-                  <button key={t} onClick={()=>setSelectedLegalizationTipo(t==='TODOS'?['1367','1368','1369']:[t])} className={`py-4 rounded-xl font-bold border-2 transition-all ${selectedLegalizationTipo.includes(t)?'border-amber-500 bg-amber-50 text-amber-700':'border-slate-50 text-slate-400'}`}>{t}</button>
+                  <button key={t} onClick={()=>setSelectedLegalizationTipo(t==='TODOS'?['1367', '1368', '1369']:[t])} className={`py-4 rounded-xl font-bold border-2 transition-all ${selectedLegalizationTipo.includes(t)?'border-amber-500 bg-amber-50 text-amber-700':'border-slate-50 text-slate-400'}`}>{t}</button>
                 ))}
              </div>
-             <FileCard title="Base General (Master)" status={files.master} onUpload={(e)=>handleFileUpload(e,'master')} color="amber" />
+             <FileCard title="Base General (Master)" status={files.master} onUpload={(e: any)=>handleFileUpload(e,'master')} color="amber" />
              <button onClick={async ()=>{
                 if(!files.master.loaded) return alert('Carga el Master');
                 setProcessing(true); setStatusMessage('Legalizando...');
@@ -204,7 +206,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   );
 }
 
-function NavItem({ active, onClick, icon, label, collapsed }: any) {
+function NavItem({ active, onClick, icon, label, collapsed }: { active: boolean, onClick: () => void, icon: ReactNode, label: string, collapsed: boolean }) {
   return (
     <div onClick={onClick} className={`flex items-center gap-4 px-4 py-3 rounded-xl cursor-pointer transition-all ${active ? 'bg-emerald-500 text-slate-900 font-black shadow-lg shadow-emerald-500/20' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
       {icon} {!collapsed && <span>{label}</span>}
@@ -212,7 +214,7 @@ function NavItem({ active, onClick, icon, label, collapsed }: any) {
   );
 }
 
-function FileCard({ title, status, onUpload, color }: any) {
+function FileCard({ title, status, onUpload, color }: { title: string, status: FileStatus, onUpload: (e: any) => void, color: string }) {
   const bg = color === 'blue' ? 'bg-blue-50 text-blue-500' : color === 'emerald' ? 'bg-emerald-50 text-emerald-500' : color === 'amber' ? 'bg-amber-50 text-amber-500' : 'bg-slate-50 text-slate-500';
   return (
     <div className={`p-5 rounded-3xl border border-slate-100 shadow-sm transition-all ${status.loaded ? 'ring-2 ring-emerald-500 bg-emerald-50/20' : 'bg-white'}`}>
@@ -222,9 +224,4 @@ function FileCard({ title, status, onUpload, color }: any) {
        <label className="cursor-pointer font-black text-[10px] block bg-slate-100 py-2 rounded-xl text-center hover:bg-slate-200 transition-all tracking-widest text-slate-500"><input type="file" className="hidden" onChange={onUpload} /> {status.loaded ? 'CAMBIAR' : 'SUBIR'}</label>
     </div>
   );
-}
-
-function download(data: any, name: string, type: string) {
-  const blob = new Blob([data], { type });
-  const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = name; link.click();
 }
