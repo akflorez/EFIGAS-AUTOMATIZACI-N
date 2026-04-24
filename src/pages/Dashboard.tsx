@@ -98,8 +98,23 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     setProcessing(true); setStatusMessage('Inyectando datos en Plantilla...');
     try {
        const result = await new ReportEngine().generateReport(files.master.secondaryData || [], files.master.data || [], '/templates/plantilla_gestion.xlsx');
-       const blob = new Blob([result.excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-       const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'INFORME_GESTION_OFICIAL.xlsx'; link.click();
+       
+       // 1. Descargar Excel
+       const excelBlob = new Blob([result.excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+       const excelLink = document.createElement('a'); 
+       excelLink.href = URL.createObjectURL(excelBlob); 
+       excelLink.download = 'INFORME_GESTION_OFICIAL.xlsx'; 
+       excelLink.click();
+
+       // 2. Descargar TXT (Si hay contenido)
+       if (result.txtContent) {
+          const txtBlob = new Blob([result.txtContent], { type: 'text/plain;charset=utf-8' });
+          const txtLink = document.createElement('a');
+          txtLink.href = URL.createObjectURL(txtBlob);
+          txtLink.download = 'COMENTARIOS.txt';
+          txtLink.click();
+       }
+       
        setProcessing(false);
     } catch(e: any) { alert('Error: ' + e.message); setProcessing(false); }
   };
@@ -240,9 +255,25 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                        const res = await fetch('/templates/Plantilla_Legalizacion_masiva.xls');
                        const buffer = await res.arrayBuffer();
                        const result = await new LegalizationEngine().processLegalization(files.master.secondaryData || [], selectedLegalizationTipo, buffer);
-                       const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([result.excelBuffer])); link.download = 'LEGALIZACION.xlsx'; link.click();
+                       
+                       // 1. Descargar Excel
+                       const excelBlob = new Blob([result.excelBuffer], { type: 'application/vnd.ms-excel' });
+                       const excelLink = document.createElement('a');
+                       excelLink.href = URL.createObjectURL(excelBlob);
+                       excelLink.download = 'LEGALIZACION.xls';
+                       excelLink.click();
+
+                       // 2. Descargar TXT
+                       if (result.txtContent) {
+                          const txtBlob = new Blob([result.txtContent], { type: 'text/plain;charset=utf-8' });
+                          const txtLink = document.createElement('a');
+                          txtLink.href = URL.createObjectURL(txtBlob);
+                          txtLink.download = 'LEGALIZACION.txt';
+                          txtLink.click();
+                       }
+                       
                        setProcessing(false);
-                    } catch(e) { alert('Error'); setProcessing(false); }
+                    } catch(e: any) { alert('Error: ' + e.message); setProcessing(false); }
                   }}
                   className="w-full mt-10 py-6 bg-slate-900 text-white font-black rounded-3xl hover:bg-slate-800 transition-all text-xl shadow-2xl"
                 >Procesar y Descargar</button>
