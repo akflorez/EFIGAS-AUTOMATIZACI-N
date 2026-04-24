@@ -22,6 +22,12 @@ export class ProcessingEngine {
     return s.toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, '').trim();
   }
 
+  private normalizeProductKey(s: any): string {
+    if (!s) return "";
+    // Removemos todo lo que no sea número y quitamos ceros a la izquierda para asegurar el match
+    return s.toString().replace(/[^0-9]/g, '').replace(/^0+/, '').trim();
+  }
+
   private safeStr(val: any): string {
     return (val || "").toString().trim();
   }
@@ -30,21 +36,20 @@ export class ProcessingEngine {
     if (!data || data.length === 0) return;
     
     let headerIdx = -1;
-    for (let i = 0; i < Math.min(data.length, 200); i++) {
+    // Buscamos la cabecera en un rango más amplio por si hay basura arriba
+    for (let i = 0; i < Math.min(data.length, 300); i++) {
         const row = data[i] || [];
         const rowStr = row.map(v => this.normalize(v));
-        // Detección ultra-agresiva de cabeceras
         if (rowStr.some(v => v.includes('producto') || v.includes('contrato') || v.includes('cuenta') || v.includes('suscriptor'))) {
             headerIdx = i;
             rowStr.forEach((val, idx) => {
                 if (val.includes('contrato') || val.includes('producto') || val.includes('suscriptor') || val.includes('cuenta')) {
-                  if (this.colIdxContrato === -1 || val.includes('contrato') || val.includes('producto')) this.colIdxContrato = idx;
+                  if (this.colIdxContrato === -1 || val.includes('contrato')) this.colIdxContrato = idx;
                 }
                 if (val.includes('nombre') || val.includes('cliente')) this.colIdxNombre = idx;
-                if (val.includes('cedula') || val.includes('identificacion') || val.includes('documento') || idx === 14) {
-                   if (this.colIdxCedula === 14 || val.includes('cedula') || val.includes('identificacion')) {
-                     this.colIdxCedula = idx;
-                   }
+                // Si el nombre dice claramente documento o cédula, lo marcamos, sino nos quedamos con la Col O (14)
+                if (val.includes('cedula') || val.includes('identificacion') || val.includes('documento')) {
+                    this.colIdxCedula = idx;
                 }
                 if (val.includes('direccion')) this.colIdxDireccion = idx;
             });
@@ -52,12 +57,13 @@ export class ProcessingEngine {
         }
     }
 
-    // Indexamos
-    const fallbackIdx = this.colIdxContrato !== -1 ? this.colIdxContrato : 0;
+    // Indexamos usando la llave normalizada (sin ceros a la izquierda)
+    const keyIdx = this.colIdxContrato !== -1 ? this.colIdxContrato : 1;
     for (let i = headerIdx + 1; i < data.length; i++) {
         const row = data[i];
         if (!row || !Array.isArray(row)) continue;
-        const key = this.safeStr(row[fallbackIdx]).replace(/\.0$/, '');
+        const rawKey = this.safeStr(row[keyIdx]);
+        const key = this.normalizeProductKey(rawKey);
         if (key) this.baseGeneral.set(key, row);
     }
   }
@@ -99,33 +105,38 @@ export class ProcessingEngine {
   public processAll(mov: any[], ter: any[], start?: string, end?: string): RegistroNormalizado[] {
     const resultados: RegistroNormalizado[] = [];
     
+    // PROCESAR MOVILIDAD
     if (mov) mov.forEach(row => {
-        const product = this.safeStr(this.getVal(row, ["Producto", "CUENTA", "CONTRATO", "SUSCRIPTOR"])).replace(/\.0$/, '');
-        const causalRaw = this.safeStr(this.getVal(row, ["Causal", "Motivo", "Causales"]));
-        if (!product || !causalRaw || causalRaw === '0') return;
+        const rawProduct = this.safeStr(this.getVal(row, ["Producto", "CUENTA", "CONTRATO", "SUSCRIPTOR"]));
+        const productKey = this.normalizeProductKey(rawProduct);
+        const productShow = rawProduct.replace(/\.0$/, '');
 
-        const base = this.baseGeneral.get(product);
+        const causalRaw = this.safeStr(this.getVal(row, ["Causal", "Motivo", "Causales"]));
+        if (!productKey || !causalRaw || causalRaw === '0') return;
+
+        const base = this.baseGeneral.get(productKey);
         const idCausal = this.extractCode(causalRaw);
         const cleanLabel = causalRaw.replace(idCausal, '').replace(/^[-\s]+/, '').trim().toUpperCase();
         const perfilMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(this.normalize(causalRaw));
         
+        // CONCATENACIÓN SOLICITADA: Incluye "Tipo de Comentario" y código al final
         const comments = this.collectComments(row);
         const labelBase = comments || cleanLabel;
         const motivoNP = `${labelBase} ${idCausal}`.trim().toUpperCase();
 
         resultados.push({
-            id_sistema: `MOV-${product}-${Math.random()}`,
+            id_sistema: `MOV-${productKey}-${Math.random()}`,
             contrato: base ? this.safeStr(base[this.colIdxContrato]) : '',
-            producto: product,
+            producto: productShow,
             cliente: base ? this.safeStr(base[this.colIdxNombre]) : '',
             direccion: base ? this.safeStr(base[this.colIdxDireccion]) : '',
             cedula_maestra: base && this.colIdxCedula !== -1 ? this.safeStr(base[this.colIdxCedula]) : '',
             telefono_maestro: this.safeStr(this.getVal(row, ["celular", "telefono"])),
-            causal: labelBase,
+            causal: labelBase.toUpperCase(),
             codigo_causal: idCausal,
             motivo_no_pago_original: causalRaw,
             motivo_no_pago_consolidado: motivoNP,
-            fecha_gestion: this.formatDate(this.getVal(row, ["Fecha", "Completada", "F completada"])) || '',
+            fecha_gestion: this.formatDate(this.getVal(row, ["Fecha", "Completada"])) || '',
             perfil_maestro: (perfilMaestro || cleanLabel || 'REVISIÓN MANUAL').toUpperCase(),
             identificacion_valida: !!base,
             fuente_principal: 'movilidad',
@@ -133,29 +144,34 @@ export class ProcessingEngine {
         });
     });
 
+    // PROCESAR TERRENO
     if (ter) ter.forEach(row => {
-        const product = this.safeStr(this.getVal(row, ["PRODUCTO", "CONTRATO", "CUENTA"])).replace(/\.0$/, '');
+        const rawProduct = this.safeStr(this.getVal(row, ["PRODUCTO", "CONTRATO", "CUENTA"]));
+        const productKey = this.normalizeProductKey(rawProduct);
+        const productShow = rawProduct.replace(/\.0$/, '');
+
         const motivoRaw = this.safeStr(this.getVal(row, ["MOTIVO DE NO PAGO", "MOTIVO"]));
         const date = this.formatDate(this.getVal(row, ["Timestamp", "Fecha"])) || '';
-        if (!product || !motivoRaw || motivoRaw === '0') return;
+        
+        if (!productKey || !motivoRaw || motivoRaw === '0') return;
         if (start && date && date < start) return;
         if (end && date && date > end) return;
 
-        const base = this.baseGeneral.get(product);
+        const base = this.baseGeneral.get(productKey);
         const idCausal = this.extractCode(motivoRaw);
         const cleanLabel = motivoRaw.replace(idCausal, '').replace(/^[-\s]+/, '').trim().toUpperCase();
         const perfilMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(this.normalize(motivoRaw));
         const mappedMotivo = this.terMotivoToCVSMap.get(idCausal) || this.terMotivoToCVSMap.get(this.normalize(motivoRaw));
 
         resultados.push({
-            id_sistema: `TER-${product}-${Math.random()}`,
+            id_sistema: `TER-${productKey}-${Math.random()}`,
             contrato: base ? this.safeStr(base[this.colIdxContrato]) : '',
-            producto: product,
+            producto: productShow,
             cliente: base ? this.safeStr(base[this.colIdxNombre]) : '',
             direccion: base ? this.safeStr(base[this.colIdxDireccion]) : '',
             cedula_maestra: base && this.colIdxCedula !== -1 ? this.safeStr(base[this.colIdxCedula]) : '',
             telefono_maestro: this.safeStr(this.getVal(row, ["celular", "telefono"])),
-            causal: this.safeStr(this.getVal(row, ["OBSERVACIONES", "DETALLE"])).toUpperCase() || cleanLabel,
+            causal: (this.safeStr(this.getVal(row, ["OBSERVACIONES", "DETALLE"])) || cleanLabel).toUpperCase(),
             codigo_causal: idCausal,
             motivo_no_pago_original: motivoRaw,
             motivo_no_pago_consolidado: (mappedMotivo || `${cleanLabel} ${idCausal}`).trim().toUpperCase(),
@@ -198,7 +214,7 @@ export class ProcessingEngine {
 
   public createExportData(resultados: RegistroNormalizado[]): any[] {
     return resultados.map(r => ({
-      'gestion': this.safeStr(r.causal).toUpperCase(),
+      'gestion': r.causal,
       'usuario': 'jairo.quintero132',
       'fechagestion': r.fecha_gestion,
       'accion': 'VISITA',
