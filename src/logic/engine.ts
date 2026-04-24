@@ -24,6 +24,7 @@ export class ProcessingEngine {
 
   private normalizeProductKey(s: any): string {
     if (!s) return "";
+    // Limpieza estándar: quitar ceros, espacios y .0
     return s.toString().trim().replace(/\.0$/, '').replace(/^0+/, '');
   }
 
@@ -56,6 +57,7 @@ export class ProcessingEngine {
     }
 
     const keyIdx = this.colIdxContrato !== -1 ? this.colIdxContrato : 0;
+    
     for (let i = headerIdx + 1; i < data.length; i++) {
         const row = data[i];
         if (!row || !Array.isArray(row)) continue;
@@ -101,7 +103,7 @@ export class ProcessingEngine {
   public processAll(mov: any[], ter: any[], start?: string, end?: string): RegistroNormalizado[] {
     const resultados: RegistroNormalizado[] = [];
     
-    // MOVILIDAD: Lógica de 8 columnas y formato DESC COD
+    // MOVILIDAD: Lógica de limpieza rigurosa
     if (mov) mov.forEach(row => {
         const rawProduct = this.safeStr(this.getVal(row, ["Producto", "CUENTA", "CONTRATO", "SUSCRIPTOR"]));
         const productKey = this.normalizeProductKey(rawProduct);
@@ -111,10 +113,11 @@ export class ProcessingEngine {
 
         const base = this.baseGeneral.get(productKey);
         const idCausal = this.extractCode(causalRaw);
+        // GESTION se llena con OBSERVACION
         const observacion = this.safeStr(this.getVal(row, ["Observacion", "OBSERVACIONES", "DETALLE"])).toUpperCase();
         
-        // Sumamos las 8 columnas de 'Tipo de Comentario' y formateamos DESC COD
-        const motivoNP = this.collectAndReformatMobilityMotive(row);
+        // Sumamos las columnas de TIPO COMENTARIO y limpiamos prefijos como "GAS, " o "BRILLA, "
+        const motivoNP = this.collectAndCleanMobilityMotive(row);
 
         const cleanLabel = causalRaw.replace(idCausal, '').replace(/^[-\s]+/, '').trim().toUpperCase();
         const perfilMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(this.normalize(causalRaw));
@@ -127,7 +130,7 @@ export class ProcessingEngine {
             direccion: base ? this.safeStr(base[this.colIdxDireccion]) : '',
             cedula_maestra: base ? this.safeStr(base[this.colIdxCedula]) : '',
             telefono_maestro: this.safeStr(this.getVal(row, ["celular", "telefono"])),
-            causal: observacion || cleanLabel, // Gestion se llena de Observacion
+            causal: observacion || cleanLabel,
             codigo_causal: idCausal,
             motivo_no_pago_original: causalRaw,
             motivo_no_pago_consolidado: motivoNP || cleanLabel,
@@ -139,7 +142,7 @@ export class ProcessingEngine {
         });
     });
 
-    // TERRENO: Dejar motivo TAL CUAL
+    // TERRENO: Motivo tal cual y GESTION con OBSERVACION
     if (ter) ter.forEach(row => {
         const rawProduct = this.safeStr(this.getVal(row, ["PRODUCTO", "CONTRATO", "CUENTA"]));
         const productKey = this.normalizeProductKey(rawProduct);
@@ -153,9 +156,8 @@ export class ProcessingEngine {
 
         const base = this.baseGeneral.get(productKey);
         const idCausal = this.extractCode(motivoRaw);
-        const cleanCausal = motivoRaw.replace(/^[A-Z,\s]+\d+[-]/, '').replace(idCausal, '').replace(/^[-\s,]+/, '').trim().toUpperCase();
-        
         const perfilMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(this.normalize(motivoRaw));
+        const cleanCausal = motivoRaw.replace(idCausal, '').replace(/^[-\s,]+/, '').trim().toUpperCase();
 
         resultados.push({
             id_sistema: `TER-${productKey}-${Math.random()}`,
@@ -165,10 +167,10 @@ export class ProcessingEngine {
             direccion: base ? this.safeStr(base[this.colIdxDireccion]) : '',
             cedula_maestra: base ? this.safeStr(base[this.colIdxCedula]) : '',
             telefono_maestro: this.safeStr(this.getVal(row, ["celular", "telefono"])),
-            causal: observacion || cleanCausal, // Gestion se llena de Observacion
+            causal: observacion || cleanCausal,
             codigo_causal: idCausal,
             motivo_no_pago_original: motivoRaw,
-            motivo_no_pago_consolidado: motivoRaw.toUpperCase(), // Se deja TAL CUAL
+            motivo_no_pago_consolidado: motivoRaw.toUpperCase(),
             fecha_gestion: date,
             perfil_maestro: (perfilMaestro || 'REVISIÓN MANUAL').toUpperCase(),
             identificacion_valida: !!base,
@@ -180,17 +182,20 @@ export class ProcessingEngine {
     return resultados;
   }
 
-  private collectAndReformatMobilityMotive(row: any): string {
+  private collectAndCleanMobilityMotive(row: any): string {
     const vals = Object.entries(row)
-        .filter(([k]) => this.normalize(k).includes('tipocomentario') || this.normalize(k).includes('tipo'))
+        .filter(([k]) => this.normalize(k).includes('comentario') || this.normalize(k).includes('tipo'))
         .map(([_, v]) => this.safeStr(v))
         .filter(v => v.length > 2 && v !== '0' && v !== '-');
     
     const reformatted = vals.map(v => {
-        // Buscar patrón CODIGO-DESCRIPCION para invertirlo
-        const match = v.match(/^(\d+)[-\s]+(.+)$/);
+        // Limpiamos prefijos de portafolio tipo "GAS, " o "BRILLA, "
+        let clean = v.replace(/^[A-Z\s]+,\s*/, '').trim();
+        
+        // Invertimos CODIGO-DESCRIPCION a DESCRIPCION CODIGO
+        const match = clean.match(/^(\d+)[-\s]+(.+)$/);
         if (match) return `${match[2].trim()} ${match[1].trim()}`;
-        return v;
+        return clean;
     });
 
     return reformatted.join(', ').toUpperCase();
