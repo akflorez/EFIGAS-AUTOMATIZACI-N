@@ -116,11 +116,11 @@ export class ProcessingEngine {
         const telMarcado = this.safeStr(row["Celular de persona que atendió"] || this.getVal(row, ["Celular", "Telefono"]));
 
         // Concatenación de "Tipo de comentario" y volteo
-        let motivoNP = this.collectCleanUniqueMobilityMotive(row);
-        
-        // REGLA ESPECIAL (v14.21): 3607 y 3889 -> CLIENTE ILOCALIZADO
+        const motivoNP = this.collectCleanUniqueMobilityMotive(row);
+
+        let perfilFinal = (this.movCausalToPerfilMap.get(idCausal) || this.cleanTextNoAccents(cleanLabel) || 'REVISIÓN MANUAL').toUpperCase();
         if (causalRaw.includes('3607') || causalRaw.includes('3889')) {
-            motivoNP = 'CLIENTE ILOCALIZADO';
+            perfilFinal = 'CLIENTE ILOCALIZADO';
         }
 
         resultados.push({
@@ -136,7 +136,7 @@ export class ProcessingEngine {
             motivo_no_pago_original: causalRaw,
             motivo_no_pago_consolidado: this.cleanTextNoAccents(motivoNP),
             fecha_gestion: this.formatDate(row["Fecha de Completación"] || this.getVal(row, ["Fecha de Completación", "Fecha de Ejecutada", "Completada"])) || '',
-            perfil_maestro: (this.movCausalToPerfilMap.get(idCausal) || this.cleanTextNoAccents(cleanLabel) || 'REVISIÓN MANUAL').toUpperCase(),
+            perfil_maestro: perfilFinal,
             identificacion_valida: !!base,
             fuente_principal: 'movilidad',
             estado_cruce: 'automatico', estado_homologacion: 'pendiente', editado_manualmente: false, comentarios_concatenados: '', motivo_error: '', tipo_comentario: '', codigo_tipo_comentario: ''
