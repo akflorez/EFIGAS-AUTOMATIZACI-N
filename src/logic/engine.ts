@@ -23,7 +23,7 @@ export class ProcessingEngine {
 
   private normalizeProductKey(s: any): string {
     if (!s) return "";
-    return s.toString().trim().replace(/\.0$/, '').replace(/^0+/, '');
+    return s.toString().trim();
   }
 
   private safeStr(val: any): string {
@@ -129,7 +129,7 @@ export class ProcessingEngine {
         resultados.push({
             id_sistema: `MOV-${productKey}-${Math.random()}`,
             contrato: base ? this.safeStr(base[this.colIdxContrato]) : '',
-            producto: rawProduct.toString().replace(/\.0$/, ''),
+            producto: rawProduct.toString().trim(),
             cliente: base ? this.safeStr(base[this.colIdxNombre] || 'CLIENTE EFIGAS') : 'PRODUCTO NO ENCONTRADO EN MASTER',
             direccion: base ? this.safeStr(base[this.colIdxProducto + 1] || base[5] || base[2]) : '',
             cedula_maestra: base ? this.safeStr(base[this.colIdxCedula]) : '',
