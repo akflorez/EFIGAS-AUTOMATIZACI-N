@@ -5,7 +5,6 @@ import type {
 export class ProcessingEngine {
   private baseGeneral: Map<string, any[]> = new Map();
   private movCausalToPerfilMap: Map<string, string> = new Map();
-  private terMotivoToCVSMap: Map<string, string> = new Map();
   
   private colIdxContrato = -1;
   private colIdxProducto = -1;
@@ -33,10 +32,9 @@ export class ProcessingEngine {
 
   private masterCleanMotivo(val: string): string {
     if(!val) return "";
-    // Elimina radicalmente GAS, BRILLA, EFIGAS, etc al principio (incluso si tienen espacio antes de la coma)
+    // Limpieza radical para que NUNCA aparezca GAS o BRILLA
     let clean = val.replace(/^(GAS|BRILLA|EFIGAS|SURTIGAS|STG|GASES|EMDECOB)\s*,?\s*/i, "").trim();
-    // Quita comas o guiones sueltos restantes al inicio
-    return clean.replace(/^[\s,.-]+/, '').trim();
+    return clean.replace(/^[\s,.-]+/, '').trim().toUpperCase();
   }
 
   public async indexBaseGeneral(data: any[][], _onProgress: any) {
@@ -46,7 +44,7 @@ export class ProcessingEngine {
     for (let i = 0; i < Math.min(data.length, 500); i++) {
         const rowData = data[i] || [];
         const rowStr = rowData.map(v => this.normalize(v));
-        if (rowStr.some(v => v.includes('contrat') || v.includes('product') || v.includes('cuenta') || v.includes('cedula'))) {
+        if (rowStr.some(v => v.includes('contrat') || v.includes('product') || v.includes('cuenta'))) {
             headerIdx = i;
             rowStr.forEach((val, idx) => {
                 const pure = val.replace(/\s+/g, '');
@@ -60,20 +58,13 @@ export class ProcessingEngine {
     }
 
     if (this.colIdxCedula === -1) this.colIdxCedula = 14;
-    
+    const keyIdx = this.colIdxProducto !== -1 ? this.colIdxProducto : (this.colIdxContrato !== -1 ? this.colIdxContrato : 0);
+
     for (let i = headerIdx + 1; i < data.length; i++) {
         const row = data[i];
         if (!row || !Array.isArray(row)) continue;
-        
-        const possibleKeys = [
-            this.normalizeProductKey(row[this.colIdxProducto]),
-            this.normalizeProductKey(row[this.colIdxContrato]),
-            this.normalizeProductKey(row[0]) // Columna A como último recurso
-        ].filter(k => k.length > 3);
-
-        possibleKeys.forEach(k => {
-            if (!this.baseGeneral.has(k)) this.baseGeneral.set(k, row);
-        });
+        const key = this.normalizeProductKey(row[keyIdx]);
+        if (key) this.baseGeneral.set(key, row);
     }
   }
 
@@ -100,10 +91,10 @@ export class ProcessingEngine {
 
   private getVal(row: any, keys: string[]): any {
     if (!row) return undefined;
-    const rowKeys = Object.keys(row);
+    const rKeys = Object.keys(row);
     for (const key of keys) {
-      const normKey = this.normalize(key);
-      const found = rowKeys.find(rk => this.normalize(rk) === normKey);
+      const nk = this.normalize(key);
+      const found = rKeys.find(rk => this.normalize(rk).includes(nk));
       if (found) return row[found];
     }
     return undefined;
@@ -112,35 +103,35 @@ export class ProcessingEngine {
   public processAll(mov: any[], ter: any[], start?: string, end?: string): RegistroNormalizado[] {
     const resultados: RegistroNormalizado[] = [];
     
-    // MOVILIDAD
+    // MOVILIDAD: Bloqueo de columna "Causal" para el motivo consolidado
     if (mov) mov.forEach(row => {
         const rawProduct = this.safeStr(this.getVal(row, ["Producto", "CUENTA", "CONTRATO"]));
         const productKey = this.normalizeProductKey(rawProduct);
         const causalRaw = this.safeStr(this.getVal(row, ["Causal", "Motivo"]));
-        if (!productKey || !causalRaw || causalRaw === '0') return;
+        if (!productKey) return;
 
         const base = this.baseGeneral.get(productKey);
         const idCausal = this.extractCode(causalRaw);
-        const observacion = this.safeStr(this.getVal(row, ["Observacion", "OBSERVACIONES", "DETALLE"])).toUpperCase();
-        const telMarcado = this.safeStr(this.getVal(row, ["Celular de persona que atendió", "Celular", "Telefono"]));
+        const observacion = this.safeStr(this.getVal(row, ["Observacion", "Detalle"])).toUpperCase();
+        const telMarcado = this.safeStr(this.getVal(row, ["Celular de persona que atendió", "Celular"]));
 
-        // Motivo Único y Limpio (v14.1)
+        // Solo usamos "Tipo de Comentario" para el motivo consolidado
         const motivoNP = this.collectCleanUniqueMobilityMotive(row);
-        const cleanLabel = this.masterCleanMotivo(causalRaw.replace(idCausal, '').replace(/^-/, '').trim()).toUpperCase();
+        const cleanLabel = this.masterCleanMotivo(causalRaw.replace(idCausal, '').trim());
         const perfilMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(this.normalize(causalRaw));
 
         resultados.push({
             id_sistema: `MOV-${productKey}-${Math.random()}`,
             contrato: base ? this.safeStr(base[this.colIdxContrato]) : '',
             producto: rawProduct.toString().replace(/\.0$/, ''),
-            cliente: base ? (this.safeStr(base[this.colIdxNombre]) || 'CLIENTE EFIGAS') : '',
+            cliente: base ? this.safeStr(base[this.colIdxNombre] || 'CLIENTE EFIGAS') : 'PRODUCTO NO ENCONTRADO EN MASTER',
             direccion: base ? this.safeStr(base[this.colIdxNombre + 1] || base[2]) : '',
             cedula_maestra: base ? this.safeStr(base[this.colIdxCedula]) : '',
             telefono_maestro: telMarcado,
             causal: observacion || cleanLabel,
             codigo_causal: idCausal,
             motivo_no_pago_original: causalRaw,
-            motivo_no_pago_consolidado: (motivoNP || cleanLabel || 'SIN MOTIVO').toUpperCase(),
+            motivo_no_pago_consolidado: (motivoNP || cleanLabel),
             fecha_gestion: this.formatDate(this.getVal(row, ["Fecha", "Completada"])) || '',
             perfil_maestro: (perfilMaestro || cleanLabel || 'REVISIÓN MANUAL').toUpperCase(),
             identificacion_valida: !!base,
@@ -154,25 +145,20 @@ export class ProcessingEngine {
         const rawProduct = this.safeStr(this.getVal(row, ["PRODUCTO", "CONTRATO", "CUENTA"]));
         const productKey = this.normalizeProductKey(rawProduct);
         const motivoRaw = this.safeStr(this.getVal(row, ["MOTIVO DE NO PAGO", "MOTIVO"]));
-        const observacion = this.safeStr(this.getVal(row, ["OBSERVACION", "OBSERVACIONES", "DETALLE"])).toUpperCase();
+        const observacion = this.safeStr(this.getVal(row, ["OBSERVACION", "DETALLE"])).toUpperCase();
         const telMarcado = this.safeStr(this.getVal(row, ["TELEFONO NUEVO", "Telefono"]));
-        const date = this.formatDate(this.getVal(row, ["Timestamp", "Fecha"])) || '';
         
-        if (!productKey || !motivoRaw || motivoRaw === '0') return;
-        if (start && date && date < start) return;
-        if (end && date && date > end) return;
-
+        if (!productKey) return;
         const base = this.baseGeneral.get(productKey);
         const idCausal = this.extractCode(motivoRaw);
-        // Limpieza Terreno (v14.1)
-        const cleanCausal = this.masterCleanMotivo(motivoRaw.replace(idCausal, '').trim()).toUpperCase();
+        const cleanCausal = this.masterCleanMotivo(motivoRaw.replace(idCausal, '').trim());
         const perfilMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(this.normalize(motivoRaw));
 
         resultados.push({
             id_sistema: `TER-${productKey}-${Math.random()}`,
             contrato: base ? this.safeStr(base[this.colIdxContrato]) : '',
             producto: rawProduct.toString().replace(/\.0$/, ''),
-            cliente: base ? (this.safeStr(base[this.colIdxNombre]) || 'CLIENTE EFIGAS') : '',
+            cliente: base ? this.safeStr(base[this.colIdxNombre]) : 'PRODUCTO NO ENCONTRADO EN MASTER',
             direccion: base ? this.safeStr(base[this.colIdxNombre + 1] || base[2]) : '',
             cedula_maestra: base ? this.safeStr(base[this.colIdxCedula]) : '',
             telefono_maestro: telMarcado,
@@ -180,7 +166,7 @@ export class ProcessingEngine {
             codigo_causal: idCausal,
             motivo_no_pago_original: motivoRaw,
             motivo_no_pago_consolidado: cleanCausal || motivoRaw.toUpperCase(),
-            fecha_gestion: date,
+            fecha_gestion: this.formatDate(this.getVal(row, ["Timestamp", "Fecha"])) || '',
             perfil_maestro: (perfilMaestro || 'REVISIÓN MANUAL').toUpperCase(),
             identificacion_valida: !!base,
             fuente_principal: 'terreno',
@@ -194,8 +180,9 @@ export class ProcessingEngine {
   private collectCleanUniqueMobilityMotive(row: any): string {
     const uniqueVals = new Set<string>();
     Object.entries(row).forEach(([k, v]) => {
-        const nk = this.normalize(k);
-        if (nk.includes('tipocomentario') || nk.includes('tipo')) {
+        const nk = k.toLowerCase();
+        // Solo columnas que digan explícitamente "Tipo de comentario"
+        if (nk.includes('tipo de comentario')) {
             const val = this.safeStr(v);
             if (val.length > 2 && val !== '0' && val !== '-') {
                 let clean = this.masterCleanMotivo(val);
@@ -214,7 +201,6 @@ export class ProcessingEngine {
     if (val instanceof Date) d = val;
     else {
         const s = this.safeStr(val);
-        if(!s || s==='0' || s==='-') return '';
         const n = Number(s);
         if(!isNaN(n) && n > 40000) d = new Date(Math.round((n - 25569) * 86400 * 1000));
         else d = new Date(s);
