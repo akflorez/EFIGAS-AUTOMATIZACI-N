@@ -21,6 +21,11 @@ export class ProcessingEngine {
     return s.toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, '').trim();
   }
 
+  private cleanTextNoAccents(s: string): string {
+    if (!s) return "";
+    return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+  }
+
   private normalizeProductKey(s: any): string {
     if (!s) return "";
     return s.toString().trim();
@@ -123,10 +128,9 @@ export class ProcessingEngine {
             telefono_maestro: telMarcado,
             causal: observacion || motivoNP,
             codigo_causal: idCausal,
-            motivo_no_pago_original: causalRaw,
-            motivo_no_pago_consolidado: motivoNP,
+            motivo_no_pago_consolidado: this.cleanTextNoAccents(motivoNP),
             fecha_gestion: this.formatDate(row["Fecha de Completación"] || this.getVal(row, ["Fecha de Completación", "Fecha de Ejecutada", "Completada"])) || '',
-            perfil_maestro: (this.movCausalToPerfilMap.get(idCausal) || cleanLabel || 'REVISIÓN MANUAL').toUpperCase(),
+            perfil_maestro: (this.movCausalToPerfilMap.get(idCausal) || this.cleanTextNoAccents(cleanLabel) || 'REVISIÓN MANUAL').toUpperCase(),
             identificacion_valida: !!base,
             fuente_principal: 'movilidad',
             estado_cruce: 'automatico', estado_homologacion: 'pendiente', editado_manualmente: false, comentarios_concatenados: '', motivo_error: '', tipo_comentario: '', codigo_tipo_comentario: ''
@@ -164,9 +168,9 @@ export class ProcessingEngine {
             causal: observacion || motivoRaw,
             codigo_causal: idCausal,
             motivo_no_pago_original: motivoRaw,
-            motivo_no_pago_consolidado: motivoRaw.toUpperCase(),
+            motivo_no_pago_consolidado: this.cleanTextNoAccents(motivoRaw),
             fecha_gestion: this.formatDate(row["Timestamp"] || row["timestamp"] || this.getVal(row, ["Timestamp", "Fecha"])) || '',
-            perfil_maestro: (perfilMaestro || cleanCausal || 'REVISIÓN MANUAL').toUpperCase(),
+            perfil_maestro: (perfilMaestro || this.cleanTextNoAccents(cleanCausal) || 'REVISIÓN MANUAL').toUpperCase(),
             identificacion_valida: !!base,
             fuente_principal: 'terreno',
             estado_cruce: 'automatico', estado_homologacion: 'pendiente', editado_manualmente: false, comentarios_concatenados: '', motivo_error: '', tipo_comentario: '', codigo_tipo_comentario: ''
@@ -202,6 +206,10 @@ export class ProcessingEngine {
         const n = Number(s);
         if(!isNaN(n) && n > 40000) d = new Date(Math.round((n - 25569) * 86400 * 1000));
         else d = new Date(s);
+    }
+    if(!d || isNaN(d.getTime())) {
+        const s = this.safeStr(val);
+        if (s.includes('-')) d = new Date(s.split(' ')[0]);
     }
     if(!d || isNaN(d.getTime())) return '';
     return `${d.getUTCFullYear()}-${(d.getUTCMonth()+1).toString().padStart(2,'0')}-${d.getUTCDate().toString().padStart(2,'0')}`;
