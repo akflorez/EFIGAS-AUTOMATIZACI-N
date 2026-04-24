@@ -24,7 +24,6 @@ export class ProcessingEngine {
 
   private normalizeProductKey(s: any): string {
     if (!s) return "";
-    // Limpieza balanceada: quitamos espacios, el .0 de Excel y ceros a la izquierda
     return s.toString().trim().replace(/\.0$/, '').replace(/^0+/, '');
   }
 
@@ -36,19 +35,18 @@ export class ProcessingEngine {
     if (!data || data.length === 0) return;
     
     let headerIdx = -1;
-    // Escaneamos hasta 500 filas buscando la cabecera
     for (let i = 0; i < Math.min(data.length, 500); i++) {
         const rowData = data[i] || [];
         const rowStr = rowData.map(v => this.normalize(v));
-        // Buscamos términos clave de Efigas
-        if (rowStr.some(v => v === 'contrato' || v === 'producto' || v === 'cuenta' || v === 'identificacion' || v === 'cedula')) {
+        if (rowStr.some(v => v === 'contrato' || v === 'producto' || v === 'cuenta' || v === 'suscriptor')) {
             headerIdx = i;
             rowStr.forEach((val, idx) => {
-                if (val === 'contrato' || val === 'producto' || val === 'suscriptor' || val === 'cuenta' || val.includes('contrato')) {
-                    if (this.colIdxContrato === -1 || val === 'contrato' || val === 'producto') this.colIdxContrato = idx;
+                const cleanVal = val.replace(/\s+/g, '');
+                if (val === 'contrato' || val === 'producto' || val === 'suscriptor' || val === 'cuenta') {
+                    if (this.colIdxContrato === -1 || val.includes('contrato')) this.colIdxContrato = idx;
                 }
                 if (val.includes('nombre') || val.includes('cliente')) this.colIdxNombre = idx;
-                if (val.includes('cedula') || val.includes('identificacion') || val.includes('documento')) {
+                if (cleanVal.includes('cedula') || cleanVal.includes('identificacion') || cleanVal.includes('documento')) {
                     this.colIdxCedula = idx;
                 }
                 if (val.includes('direccion')) this.colIdxDireccion = idx;
@@ -57,7 +55,6 @@ export class ProcessingEngine {
         }
     }
 
-    // El índice 14 (Columna O) es sagrado para la cédula si no se detectó otra
     if (this.colIdxCedula === -1) this.colIdxCedula = 14;
     const keyIdx = this.colIdxContrato !== -1 ? this.colIdxContrato : 0;
 
@@ -65,9 +62,7 @@ export class ProcessingEngine {
         const row = data[i];
         if (!row || !Array.isArray(row)) continue;
         const key = this.normalizeProductKey(row[keyIdx]);
-        if (key) {
-            this.baseGeneral.set(key, row);
-        }
+        if (key) this.baseGeneral.set(key, row);
     }
   }
 
@@ -108,7 +103,6 @@ export class ProcessingEngine {
   public processAll(mov: any[], ter: any[], start?: string, end?: string): RegistroNormalizado[] {
     const resultados: RegistroNormalizado[] = [];
     
-    // MOVILIDAD
     if (mov) mov.forEach(row => {
         const rawProduct = this.safeStr(this.getVal(row, ["Producto", "CUENTA", "CONTRATO", "SUSCRIPTOR"]));
         const productKey = this.normalizeProductKey(rawProduct);
@@ -120,10 +114,9 @@ export class ProcessingEngine {
         const idCausal = this.extractCode(causalRaw);
         const observacion = this.safeStr(this.getVal(row, ["Observacion", "OBSERVACIONES", "DETALLE"])).toUpperCase();
         
-        // Formato Motivo: DESCRIPCION CODIGO
+        // Sumar las 8 columnas de Tipo de Comentario y voltear el formato
         const motivoNP = this.collectAndReformatMobilityMotive(row);
-
-        const cleanLabel = causalRaw.replace(idCausal, '').replace(/^[-\s]+/, '').trim().toUpperCase();
+        const cleanLabel = causalRaw.replace(idCausal, '').replace(/^[A-Z,\s]+/, '').replace(/^-/, '').trim().toUpperCase();
         const perfilMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(this.normalize(causalRaw));
 
         resultados.push({
@@ -133,7 +126,7 @@ export class ProcessingEngine {
             cliente: base ? this.safeStr(base[this.colIdxNombre]) : '',
             direccion: base ? this.safeStr(base[this.colIdxDireccion]) : '',
             cedula_maestra: base ? this.safeStr(base[this.colIdxCedula]) : '',
-            telefono_maestro: this.safeStr(this.getVal(row, ["celular", "telefono"])),
+            telefono_maestro: this.safeStr(this.getVal(row, ["Telefono", "Celular", "Numero", "Marcado"])),
             causal: observacion || cleanLabel,
             codigo_causal: idCausal,
             motivo_no_pago_original: causalRaw,
@@ -146,7 +139,6 @@ export class ProcessingEngine {
         });
     });
 
-    // TERRENO
     if (ter) ter.forEach(row => {
         const rawProduct = this.safeStr(this.getVal(row, ["PRODUCTO", "CONTRATO", "CUENTA"]));
         const productKey = this.normalizeProductKey(rawProduct);
@@ -170,7 +162,7 @@ export class ProcessingEngine {
             cliente: base ? this.safeStr(base[this.colIdxNombre]) : '',
             direccion: base ? this.safeStr(base[this.colIdxDireccion]) : '',
             cedula_maestra: base ? this.safeStr(base[this.colIdxCedula]) : '',
-            telefono_maestro: this.safeStr(this.getVal(row, ["celular", "telefono"])),
+            telefono_maestro: this.safeStr(this.getVal(row, ["Telefono", "Celular", "Numero", "Marcado"])),
             causal: observacion || cleanCausal,
             codigo_causal: idCausal,
             motivo_no_pago_original: motivoRaw,
@@ -188,13 +180,18 @@ export class ProcessingEngine {
 
   private collectAndReformatMobilityMotive(row: any): string {
     const vals = Object.entries(row)
-        .filter(([k]) => this.normalize(k).includes('comentario') || this.normalize(k).includes('tipo'))
+        .filter(([k]) => {
+            const nk = this.normalize(k);
+            return nk.includes('tipocomentario') || nk.includes('comentario');
+        })
         .map(([_, v]) => this.safeStr(v))
         .filter(v => v.length > 2 && v !== '0' && v !== '-');
     
     return vals.map(v => {
+        // Quitamos prefijos Gas, Brilla, etc. si existen al principio
         let clean = v.replace(/^[A-Z\s]+,\s*/, '').trim();
         const match = clean.match(/^(\d+)[-\s]+(.+)$/);
+        // Si es 1478-Negociacion -> Negociacion 1478
         if (match) return `${match[2].trim()} ${match[1].trim()}`;
         return clean;
     }).join(', ').toUpperCase();
