@@ -24,12 +24,10 @@ export class ReportEngine {
 
     const targetSheet = originalSheet;
     
-    // 3. Limpieza profunda (Hasta 35,000 filas para que no quede rastro de la base completa)
-    console.log('Iniciando limpieza de plantilla...');
-    for (let r = 8; r <= 35000; r++) {
+    console.log('Iniciando limpieza optimizada de plantilla...');
+    for (let r = 8; r <= 15000; r++) {
       const row = targetSheet.getRow(r);
-      // Solo limpiamos si la fila existe o tiene algo (optimización básica)
-      if (row.hasValues) {
+      if (row && row.hasValues) {
         for (let c = 1; c <= 75; c++) {
           row.getCell(c).value = null;
         }
@@ -37,9 +35,9 @@ export class ReportEngine {
     }
     
     if (commentsSheet) {
-      for (let r = 3; r <= 35000; r++) {
+      for (let r = 3; r <= 15000; r++) {
         const row = commentsSheet.getRow(r);
-        if (row.hasValues) {
+        if (row && row.hasValues) {
           row.getCell(1).value = null;
           row.getCell(2).value = null;
           row.getCell(3).value = null;
