@@ -133,7 +133,7 @@ export class ProcessingEngine {
             motivo_no_pago_original: causalRaw,
             motivo_no_pago_consolidado: motivoNP,
             fecha_gestion: this.formatDate(this.getVal(row, ["Fecha de Ejecutada", "Completada"])) || '',
-            perfil_maestro: (this.movCausalToPerfilMap.get(idCausal) || 'REVISIÓN MANUAL').toUpperCase(),
+            perfil_maestro: (this.movCausalToPerfilMap.get(idCausal) || cleanLabel || 'REVISIÓN MANUAL').toUpperCase(),
             identificacion_valida: !!base,
             fuente_principal: 'movilidad',
             estado_cruce: 'automatico', estado_homologacion: 'pendiente', editado_manualmente: false, comentarios_concatenados: '', motivo_error: '', tipo_comentario: '', codigo_tipo_comentario: ''
@@ -172,7 +172,7 @@ export class ProcessingEngine {
             motivo_no_pago_original: motivoRaw,
             motivo_no_pago_consolidado: motivoRaw.toUpperCase(),
             fecha_gestion: this.formatDate(this.getVal(row, ["Timestamp", "Fecha"])) || '',
-            perfil_maestro: (perfilMaestro || 'REVISIÓN MANUAL').toUpperCase(),
+            perfil_maestro: (perfilMaestro || cleanCausal || 'REVISIÓN MANUAL').toUpperCase(),
             identificacion_valida: !!base,
             fuente_principal: 'terreno',
             estado_cruce: 'automatico', estado_homologacion: 'pendiente', editado_manualmente: false, comentarios_concatenados: '', motivo_error: '', tipo_comentario: '', codigo_tipo_comentario: ''

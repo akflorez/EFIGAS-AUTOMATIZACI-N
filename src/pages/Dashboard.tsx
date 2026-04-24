@@ -126,7 +126,7 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
 
       <main className={`flex-1 ${isSidebarCollapsed ? 'ml-20' : 'ml-72'} p-10`}>
         <header className="flex justify-between items-center mb-10">
-           <h2 className="text-3xl font-black">Efigas Dashboard v14.8</h2>
+           <h2 className="text-3xl font-black">Efigas Dashboard v14.9</h2>
            <div className="bg-white px-4 py-2 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3"><UserIcon size={18} /> <span className="font-bold text-sm">Operador Senior</span></div>
         </header>
 
