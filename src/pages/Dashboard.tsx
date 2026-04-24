@@ -125,7 +125,7 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
 
       <main className={`flex-1 ${isSidebarCollapsed ? 'ml-20' : 'ml-72'} p-10`}>
         <header className="flex justify-between items-center mb-10">
-           <h2 className="text-3xl font-black">Efigas Dashboard v14.16</h2>
+           <h2 className="text-3xl font-black">Efigas Dashboard v14.17</h2>
            <div className="bg-white px-4 py-2 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3"><UserIcon size={18} /> <span className="font-bold text-sm">Operador Senior</span></div>
         </header>
 
@@ -155,8 +155,10 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
                <div className="space-y-6">
                   <div className="bg-slate-900 text-white p-6 rounded-3xl flex justify-between items-center shadow-xl">
                      <div className="flex gap-10">
-                        <div><p className="text-[10px] font-black text-slate-500 uppercase tracking-tighter mb-1">Total Procesados</p><p className="text-3xl font-black">{resultados.length}</p></div>
-                        <div><p className="text-[10px] font-black text-slate-500 uppercase tracking-tighter mb-1">Identificados (Cédula)</p><p className="text-3xl font-black text-emerald-400">{resultados.filter(r=>r.identificacion_valida).length}</p></div>
+                         <div><p className="text-[10px] font-black text-slate-500 uppercase tracking-tighter mb-1">Total Procesados</p><p className="text-3xl font-black">{resultados.length}</p></div>
+                         <div><p className="text-[10px] font-black text-slate-500 uppercase tracking-tighter mb-1">Movilidad</p><p className="text-3xl font-black text-blue-400">{resultados.filter(r=>r.fuente_principal==='movilidad').length}</p></div>
+                         <div><p className="text-[10px] font-black text-slate-500 uppercase tracking-tighter mb-1">Terreno</p><p className="text-3xl font-black text-emerald-400">{resultados.filter(r=>r.fuente_principal==='terreno').length}</p></div>
+                         <div><p className="text-[10px] font-black text-slate-500 uppercase tracking-tighter mb-1">Identificados</p><p className="text-3xl font-black text-amber-400">{resultados.filter(r=>r.identificacion_valida).length}</p></div>
                      </div>
                      <div className="flex items-center gap-4 bg-white/5 p-4 rounded-2xl border border-white/10">
                         <input type="date" value={globalDate} onChange={(e)=>setGlobalDate(e.target.value)} className="bg-transparent border-none text-white text-xs font-bold outline-none cursor-pointer" />
