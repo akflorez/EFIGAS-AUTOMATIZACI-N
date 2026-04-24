@@ -8,7 +8,7 @@ import { LegalizationEngine } from '../logic/legalizationEngine';
 import { 
   FileCheck, LogOut, ChevronRight,
   User as UserIcon, CircleDollarSign, Map,
-  Database, Layers, Calendar, Edit3, Download, AlertCircle
+  Database, Layers, Calendar, Download
 } from 'lucide-react';
 
 interface FileStatus {
