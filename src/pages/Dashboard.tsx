@@ -126,14 +126,14 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
 
       <main className={`flex-1 ${isSidebarCollapsed ? 'ml-20' : 'ml-72'} p-10`}>
         <header className="flex justify-between items-center mb-10">
-           <h2 className="text-3xl font-black">Efigas Dashboard v14.11</h2>
+           <h2 className="text-3xl font-black">Efigas Dashboard v14.12</h2>
            <div className="bg-white px-4 py-2 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3"><UserIcon size={18} /> <span className="font-bold text-sm">Operador Senior</span></div>
         </header>
 
         {activeTab === 'procesar' ? (
           <div className="space-y-8">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center">
-               <div className="flex items-center gap-4"><Calendar className="text-emerald-500" /> <h3 className="font-black text-sm uppercase">Filtro de Fecha (Solo Terreno)</h3></div>
+               <div className="flex items-center gap-4"><Calendar className="text-emerald-500" /> <h3 className="font-black text-sm uppercase">Filtro de Fecha (Movilidad y Terreno)</h3></div>
                <div className="flex gap-4">
                   <input type="date" value={fechaInicio} className="border rounded-lg px-3 py-1.5 text-xs font-bold" onChange={(e)=>setFechaInicio(e.target.value)} />
                   <input type="date" value={fechaFin} className="border rounded-lg px-3 py-1.5 text-xs font-bold" onChange={(e)=>setFechaFin(e.target.value)} />
