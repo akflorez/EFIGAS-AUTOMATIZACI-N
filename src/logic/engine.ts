@@ -52,7 +52,6 @@ export class ProcessingEngine {
     }
 
     if (this.colIdxCedula === -1) this.colIdxCedula = 14;
-    const keyIdx = this.colIdxProducto !== -1 ? this.colIdxProducto : (this.colIdxContrato !== -1 ? this.colIdxContrato : 0);
 
     for (let i = headerIdx + 1; i < data.length; i++) {
         const row = data[i];
@@ -98,7 +97,7 @@ export class ProcessingEngine {
     return undefined;
   }
 
-  public processAll(mov: any[], ter: any[], start?: string, end?: string): RegistroNormalizado[] {
+  public processAll(mov: any[], ter: any[]): RegistroNormalizado[] {
     const resultados: RegistroNormalizado[] = [];
     
     // MOVILIDAD: Basado en estructura real detectada
@@ -164,7 +163,7 @@ export class ProcessingEngine {
             causal: observacion || motivoRaw,
             codigo_causal: idCausal,
             motivo_no_pago_original: motivoRaw,
-            motivo_no_pago_consolidated: motivoRaw.toUpperCase(),
+            motivo_no_pago_consolidado: motivoRaw.toUpperCase(),
             fecha_gestion: this.formatDate(this.getVal(row, ["Timestamp", "Fecha"])) || '',
             perfil_maestro: (perfilMaestro || 'REVISIÓN MANUAL').toUpperCase(),
             identificacion_valida: !!base,
@@ -214,7 +213,7 @@ export class ProcessingEngine {
       'fechagestion': r.fecha_gestion,
       'accion': 'VISITA',
       'perfil': r.perfil_maestro,
-      'motivonopago': r.motivo_no_pago_consolidated || r.motivo_no_pago_original,
+      'motivonopago': r.motivo_no_pago_consolidado || r.motivo_no_pago_original,
       'numeromarcado': r.telefono_maestro,
       'identificacion': r.cedula_maestra,
       'cuenta': r.producto,
