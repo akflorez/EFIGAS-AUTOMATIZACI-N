@@ -39,7 +39,7 @@ export class ProcessingEngine {
             row.forEach((val, idx) => {
                 if (val.includes('contrato')) this.colIdxContrato = idx;
                 if (val.includes('nombre') || val.includes('cliente')) this.colIdxNombre = idx;
-                if (val.includes('cedula') || val.includes('identificacion')) this.colIdxCedula = idx;
+                if (val.includes('cedula') || val.includes('identificacion') || idx === 14) this.colIdxCedula = idx;
                 if (val.includes('direccion')) this.colIdxDireccion = idx;
             });
             break;
@@ -193,7 +193,7 @@ export class ProcessingEngine {
   public createExportData(resultados: RegistroNormalizado[]): any[] {
     return resultados.map(r => ({
       'gestion': r.causal,
-      'usuario': 'emdecob.efigas',
+      'usuario': 'jairo.quintero132',
       'fechagestion': r.fecha_gestion,
       'accion': 'VISITA',
       'perfil': r.perfil_maestro,
