@@ -190,6 +190,7 @@ export class ProcessingEngine {
     const perfilFromMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(normCausal);
     const perfil = (perfilFromMaestro || cleanLabel || 'REVISIÓN MANUAL').toString().toUpperCase().trim();
     
+    // Generamos el Motivo NP concatenando comentarios y código
     const motivoNP = `${obsLarga} ${idCausal}`.trim().toUpperCase();
 
     return {
