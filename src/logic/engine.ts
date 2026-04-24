@@ -9,7 +9,7 @@ export class ProcessingEngine {
   
   private colIdxContrato = -1;
   private colIdxNombre = -1;
-  private colIdxCedula = 14; 
+  private colIdxCedula = 14; // Default O
   private colIdxDireccion = -1;
 
   public stats = {
@@ -24,7 +24,7 @@ export class ProcessingEngine {
 
   private normalizeProductKey(s: any): string {
     if (!s) return "";
-    // Limpieza estándar: quitar ceros, espacios y .0
+    // Limpieza balanceada: quitamos espacios, el .0 de Excel y ceros a la izquierda
     return s.toString().trim().replace(/\.0$/, '').replace(/^0+/, '');
   }
 
@@ -36,18 +36,19 @@ export class ProcessingEngine {
     if (!data || data.length === 0) return;
     
     let headerIdx = -1;
-    for (let i = 0; i < Math.min(data.length, 300); i++) {
+    // Escaneamos hasta 500 filas buscando la cabecera
+    for (let i = 0; i < Math.min(data.length, 500); i++) {
         const rowData = data[i] || [];
         const rowStr = rowData.map(v => this.normalize(v));
-        if (rowStr.some(v => v === 'contrato' || v === 'producto' || v === 'suscriptor' || v === 'cuenta')) {
+        // Buscamos términos clave de Efigas
+        if (rowStr.some(v => v === 'contrato' || v === 'producto' || v === 'cuenta' || v === 'identificacion' || v === 'cedula')) {
             headerIdx = i;
             rowStr.forEach((val, idx) => {
                 if (val === 'contrato' || val === 'producto' || val === 'suscriptor' || val === 'cuenta' || val.includes('contrato')) {
-                  if (this.colIdxContrato === -1 || val === 'contrato' || val === 'producto') this.colIdxContrato = idx;
+                    if (this.colIdxContrato === -1 || val === 'contrato' || val === 'producto') this.colIdxContrato = idx;
                 }
                 if (val.includes('nombre') || val.includes('cliente')) this.colIdxNombre = idx;
-                // Forzamos columna O (14) pero también buscamos por nombre 'cedula' con espacios
-                if (val.includes('cedula') || val.includes('identificacion') || idx === 14) {
+                if (val.includes('cedula') || val.includes('identificacion') || val.includes('documento')) {
                     this.colIdxCedula = idx;
                 }
                 if (val.includes('direccion')) this.colIdxDireccion = idx;
@@ -56,13 +57,17 @@ export class ProcessingEngine {
         }
     }
 
+    // El índice 14 (Columna O) es sagrado para la cédula si no se detectó otra
+    if (this.colIdxCedula === -1) this.colIdxCedula = 14;
     const keyIdx = this.colIdxContrato !== -1 ? this.colIdxContrato : 0;
-    
+
     for (let i = headerIdx + 1; i < data.length; i++) {
         const row = data[i];
         if (!row || !Array.isArray(row)) continue;
         const key = this.normalizeProductKey(row[keyIdx]);
-        if (key) this.baseGeneral.set(key, row);
+        if (key) {
+            this.baseGeneral.set(key, row);
+        }
     }
   }
 
@@ -103,7 +108,7 @@ export class ProcessingEngine {
   public processAll(mov: any[], ter: any[], start?: string, end?: string): RegistroNormalizado[] {
     const resultados: RegistroNormalizado[] = [];
     
-    // MOVILIDAD: Lógica de limpieza rigurosa
+    // MOVILIDAD
     if (mov) mov.forEach(row => {
         const rawProduct = this.safeStr(this.getVal(row, ["Producto", "CUENTA", "CONTRATO", "SUSCRIPTOR"]));
         const productKey = this.normalizeProductKey(rawProduct);
@@ -113,11 +118,10 @@ export class ProcessingEngine {
 
         const base = this.baseGeneral.get(productKey);
         const idCausal = this.extractCode(causalRaw);
-        // GESTION se llena con OBSERVACION
         const observacion = this.safeStr(this.getVal(row, ["Observacion", "OBSERVACIONES", "DETALLE"])).toUpperCase();
         
-        // Sumamos las columnas de TIPO COMENTARIO y limpiamos prefijos como "GAS, " o "BRILLA, "
-        const motivoNP = this.collectAndCleanMobilityMotive(row);
+        // Formato Motivo: DESCRIPCION CODIGO
+        const motivoNP = this.collectAndReformatMobilityMotive(row);
 
         const cleanLabel = causalRaw.replace(idCausal, '').replace(/^[-\s]+/, '').trim().toUpperCase();
         const perfilMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(this.normalize(causalRaw));
@@ -142,7 +146,7 @@ export class ProcessingEngine {
         });
     });
 
-    // TERRENO: Motivo tal cual y GESTION con OBSERVACION
+    // TERRENO
     if (ter) ter.forEach(row => {
         const rawProduct = this.safeStr(this.getVal(row, ["PRODUCTO", "CONTRATO", "CUENTA"]));
         const productKey = this.normalizeProductKey(rawProduct);
@@ -156,8 +160,8 @@ export class ProcessingEngine {
 
         const base = this.baseGeneral.get(productKey);
         const idCausal = this.extractCode(motivoRaw);
-        const perfilMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(this.normalize(motivoRaw));
         const cleanCausal = motivoRaw.replace(idCausal, '').replace(/^[-\s,]+/, '').trim().toUpperCase();
+        const perfilMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(this.normalize(motivoRaw));
 
         resultados.push({
             id_sistema: `TER-${productKey}-${Math.random()}`,
@@ -182,23 +186,18 @@ export class ProcessingEngine {
     return resultados;
   }
 
-  private collectAndCleanMobilityMotive(row: any): string {
+  private collectAndReformatMobilityMotive(row: any): string {
     const vals = Object.entries(row)
         .filter(([k]) => this.normalize(k).includes('comentario') || this.normalize(k).includes('tipo'))
         .map(([_, v]) => this.safeStr(v))
         .filter(v => v.length > 2 && v !== '0' && v !== '-');
     
-    const reformatted = vals.map(v => {
-        // Limpiamos prefijos de portafolio tipo "GAS, " o "BRILLA, "
+    return vals.map(v => {
         let clean = v.replace(/^[A-Z\s]+,\s*/, '').trim();
-        
-        // Invertimos CODIGO-DESCRIPCION a DESCRIPCION CODIGO
         const match = clean.match(/^(\d+)[-\s]+(.+)$/);
         if (match) return `${match[2].trim()} ${match[1].trim()}`;
         return clean;
-    });
-
-    return reformatted.join(', ').toUpperCase();
+    }).join(', ').toUpperCase();
   }
 
   private formatDate(val: any): string {
