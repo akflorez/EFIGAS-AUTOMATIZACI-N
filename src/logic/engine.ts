@@ -8,9 +8,8 @@ export class ProcessingEngine {
   private terMotivoToCVSMap: Map<string, string> = new Map();
   
   private colIdxContrato = -1;
-  private colIdxNombre = -1;
+  private colIdxProducto = -1;
   private colIdxCedula = 14; 
-  private colIdxDireccion = -1;
 
   public stats = {
     movTotal: 0, movConCausal: 0, movEnFecha: 0,
@@ -24,6 +23,7 @@ export class ProcessingEngine {
 
   private normalizeProductKey(s: any): string {
     if (!s) return "";
+    // Limpieza radical para llaves de producto
     return s.toString().trim().replace(/\.0$/, '').replace(/^0+/, '');
   }
 
@@ -38,29 +38,34 @@ export class ProcessingEngine {
     for (let i = 0; i < Math.min(data.length, 500); i++) {
         const rowData = data[i] || [];
         const rowStr = rowData.map(v => this.normalize(v));
-        if (rowStr.some(v => v === 'contrato' || v === 'producto' || v === 'cuenta' || v === 'suscriptor')) {
+        // Detección tolerante a "CONTRA TO" o "PRODUC TO"
+        if (rowStr.some(v => v.includes('contrat') || v.includes('product') || v.includes('cuenta') || v.includes('cedula'))) {
             headerIdx = i;
             rowStr.forEach((val, idx) => {
-                const cleanVal = val.replace(/\s+/g, '');
-                if (val === 'contrato' || val === 'producto' || val === 'suscriptor' || val === 'cuenta' || val === 'idproducto') {
-                    if (this.colIdxContrato === -1 || val === 'producto' || val === 'contrato') this.colIdxContrato = idx;
-                }
-                if (val.includes('nombre') || val.includes('cliente')) this.colIdxNombre = idx;
-                if (cleanVal.includes('cedula') || cleanVal.includes('identificacion') || idx === 14) {
-                    this.colIdxCedula = idx;
-                }
-                if (val.includes('direccion')) this.colIdxDireccion = idx;
+                const pure = val.replace(/\s+/g, '');
+                if (pure.includes('contrato')) this.colIdxContrato = idx;
+                if (pure.includes('producto') || pure.includes('cuenta')) this.colIdxProducto = idx;
+                if (pure.includes('cedula') || pure.includes('identificacion') || idx === 14) this.colIdxCedula = idx;
             });
             break;
         }
     }
 
-    const keyIdx = this.colIdxContrato !== -1 ? this.colIdxContrato : 0;
+    if (this.colIdxCedula === -1) this.colIdxCedula = 14;
+    
+    // Indexamos por ambas columnas para asegurar el cruce
     for (let i = headerIdx + 1; i < data.length; i++) {
         const row = data[i];
         if (!row || !Array.isArray(row)) continue;
-        const key = this.normalizeProductKey(row[keyIdx]);
-        if (key) this.baseGeneral.set(key, row);
+        
+        if (this.colIdxProducto !== -1) {
+            const keyP = this.normalizeProductKey(row[this.colIdxProducto]);
+            if (keyP) this.baseGeneral.set(keyP, row);
+        }
+        if (this.colIdxContrato !== -1) {
+            const keyC = this.normalizeProductKey(row[this.colIdxContrato]);
+            if (keyC) this.baseGeneral.set(keyC, row);
+        }
     }
   }
 
@@ -101,7 +106,7 @@ export class ProcessingEngine {
   public processAll(mov: any[], ter: any[], start?: string, end?: string): RegistroNormalizado[] {
     const resultados: RegistroNormalizado[] = [];
     
-    // MOVILIDAD: Mapeo exacto solicitado
+    // MOVILIDAD
     if (mov) mov.forEach(row => {
         const rawProduct = this.safeStr(this.getVal(row, ["Producto", "CUENTA", "CONTRATO", "SUSCRIPTOR"]));
         const productKey = this.normalizeProductKey(rawProduct);
@@ -112,22 +117,19 @@ export class ProcessingEngine {
         const base = this.baseGeneral.get(productKey);
         const idCausal = this.extractCode(causalRaw);
         const observacion = this.safeStr(this.getVal(row, ["Observacion", "OBSERVACIONES", "DETALLE"])).toUpperCase();
-        
-        // Número marcado: "Celular de persona que atendió"
         const telMarcado = this.safeStr(this.getVal(row, ["Celular de persona que atendió", "Celular", "Telefono"]));
 
-        // Motivo no pago: Inversión de "Tipo de comentario"
-        const motivoNP = this.collectAndReformatMobilityMotive(row);
-
-        const cleanLabel = causalRaw.replace(idCausal, '').replace(/^[-\s,]+/, '').trim().toUpperCase();
+        // Motivo Único y Limpio
+        const motivoNP = this.collectCleanUniqueMobilityMotive(row);
+        const cleanLabel = causalRaw.replace(idCausal, '').replace(/^[A-Z\s,]+/, '').replace(/^-/, '').trim().toUpperCase();
         const perfilMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(this.normalize(causalRaw));
 
         resultados.push({
             id_sistema: `MOV-${productKey}-${Math.random()}`,
             contrato: base ? this.safeStr(base[this.colIdxContrato]) : '',
             producto: rawProduct.toString().replace(/\.0$/, ''),
-            cliente: base ? this.safeStr(base[this.colIdxNombre]) : '',
-            direccion: base ? this.safeStr(base[this.colIdxDireccion]) : '',
+            cliente: base ? this.safeStr(base[this.colIdxProducto + 1] || base[2]) : '',
+            direccion: base ? this.safeStr(base[this.colIdxProducto + 2] || base[3]) : '',
             cedula_maestra: base ? this.safeStr(base[this.colIdxCedula]) : '',
             telefono_maestro: telMarcado,
             causal: observacion || cleanLabel,
@@ -142,16 +144,13 @@ export class ProcessingEngine {
         });
     });
 
-    // TERRENO: Mapeo exacto solicitado
+    // TERRENO
     if (ter) ter.forEach(row => {
         const rawProduct = this.safeStr(this.getVal(row, ["PRODUCTO", "CONTRATO", "CUENTA"]));
         const productKey = this.normalizeProductKey(rawProduct);
         const motivoRaw = this.safeStr(this.getVal(row, ["MOTIVO DE NO PAGO", "MOTIVO"]));
         const observacion = this.safeStr(this.getVal(row, ["OBSERVACION", "OBSERVACIONES", "DETALLE"])).toUpperCase();
-        
-        // Número marcado: "TELEFONO NUEVO"
         const telMarcado = this.safeStr(this.getVal(row, ["TELEFONO NUEVO", "Telefono", "Numero"]));
-
         const date = this.formatDate(this.getVal(row, ["Timestamp", "Fecha"])) || '';
         
         if (!productKey || !motivoRaw || motivoRaw === '0') return;
@@ -160,15 +159,15 @@ export class ProcessingEngine {
 
         const base = this.baseGeneral.get(productKey);
         const idCausal = this.extractCode(motivoRaw);
-        const perfilMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(this.normalize(motivoRaw));
         const cleanCausal = motivoRaw.replace(idCausal, '').replace(/^[-\s,]+/, '').trim().toUpperCase();
+        const perfilMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(this.normalize(motivoRaw));
 
         resultados.push({
             id_sistema: `TER-${productKey}-${Math.random()}`,
             contrato: base ? this.safeStr(base[this.colIdxContrato]) : '',
             producto: rawProduct.toString().replace(/\.0$/, ''),
-            cliente: base ? this.safeStr(base[this.colIdxNombre]) : '',
-            direccion: base ? this.safeStr(base[this.colIdxDireccion]) : '',
+            cliente: base ? this.safeStr(base[this.colIdxProducto + 1] || base[2]) : '',
+            direccion: base ? this.safeStr(base[this.colIdxProducto + 2] || base[3]) : '',
             cedula_maestra: base ? this.safeStr(base[this.colIdxCedula]) : '',
             telefono_maestro: telMarcado,
             causal: observacion || cleanCausal,
@@ -186,22 +185,23 @@ export class ProcessingEngine {
     return resultados;
   }
 
-  private collectAndReformatMobilityMotive(row: any): string {
-    const vals = Object.entries(row)
-        .filter(([k]) => {
-          const nk = this.normalize(k);
-          return nk.includes('tipocomentario') || nk.includes('tipo');
-        })
-        .map(([_, v]) => this.safeStr(v))
-        .filter(v => v.length > 2 && v !== '0' && v !== '-');
+  private collectCleanUniqueMobilityMotive(row: any): string {
+    const uniqueVals = new Set<string>();
+    Object.entries(row).forEach(([k, v]) => {
+        const nk = this.normalize(k);
+        if (nk.includes('tipocomentario') || nk.includes('tipo')) {
+            const val = this.safeStr(v);
+            if (val.length > 2 && val !== '0' && val !== '-') {
+                // Limpieza agresiva de prefijos como GAS, BRILLA, etc. terminados en coma
+                let clean = val.replace(/^[A-Z,\s]+,\s*/i, '').trim();
+                const match = clean.match(/^(\d+)[-\s]+(.+)$/);
+                if (match) uniqueVals.add(`${match[2].trim()} ${match[1].trim()}`);
+                else uniqueVals.add(clean);
+            }
+        }
+    });
     
-    return vals.map(v => {
-        let clean = v.replace(/^[A-Z\s]+,\s*/, '').trim();
-        const match = clean.match(/^(\d+)[-\s]+(.+)$/);
-        // De 1478-Negociacion a NEGOCIACION 1478
-        if (match) return `${match[2].trim()} ${match[1].trim()}`;
-        return clean;
-    }).join(', ').toUpperCase();
+    return Array.from(uniqueVals).join(', ').toUpperCase();
   }
 
   private formatDate(val: any): string {
