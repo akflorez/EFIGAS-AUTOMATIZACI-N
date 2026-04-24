@@ -112,6 +112,7 @@ export class ProcessingEngine {
 
         const base = this.baseGeneral.get(productKey);
         const idCausal = this.extractCode(causalRaw);
+        const cleanLabel = causalRaw.replace(idCausal, '').replace(/^[-\s,]+/, '').trim().toUpperCase();
         const observacion = this.safeStr(this.getVal(row, ["Observación", "Detalle"])).toUpperCase();
         
         // Columna Exacta: "Celular de persona que atendió"
@@ -157,6 +158,7 @@ export class ProcessingEngine {
 
         const base = this.baseGeneral.get(productKey);
         const idCausal = this.extractCode(motivoRaw);
+        const cleanCausal = motivoRaw.replace(idCausal, '').replace(/^[-\s,]+/, '').trim().toUpperCase();
         const perfilMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(this.normalize(motivoRaw));
 
         resultados.push({
