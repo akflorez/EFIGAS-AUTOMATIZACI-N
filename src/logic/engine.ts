@@ -200,20 +200,24 @@ export class ProcessingEngine {
 
   private formatDate(val: any): string {
     if (!val) return '';
-    let d: Date | null = null;
-    if (val instanceof Date) d = val;
-    else {
-        const s = this.safeStr(val);
-        const n = Number(s);
-        if(!isNaN(n) && n > 40000) d = new Date(Math.round((n - 25569) * 86400 * 1000));
-        else d = new Date(s);
+    if (val instanceof Date) {
+        const y = val.getFullYear();
+        const m = val.getMonth() + 1;
+        const d = val.getDate();
+        return `${y}-${m.toString().padStart(2, '0')}-${d.toString().padStart(2, '0')}`;
     }
-    if(!d || isNaN(d.getTime())) {
-        const s = this.safeStr(val);
-        if (s.includes('-')) d = new Date(s.split(' ')[0]);
+    const s = this.safeStr(val);
+    if (!s || s === '-') return '';
+    
+    const match = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return `${match[1]}-${match[2]}-${match[3]}`;
+
+    const n = Number(s);
+    if (!isNaN(n) && n > 40000) {
+        const d = new Date(Math.round((n - 25569) * 86400 * 1000));
+        return `${d.getUTCFullYear()}-${(d.getUTCMonth() + 1).toString().padStart(2, '0')}-${d.getUTCDate().toString().padStart(2, '0')}`;
     }
-    if(!d || isNaN(d.getTime())) return '';
-    return `${d.getUTCFullYear()}-${(d.getUTCMonth()+1).toString().padStart(2,'0')}-${d.getUTCDate().toString().padStart(2,'0')}`;
+    return '';
   }
 
   public createExportData(resultados: RegistroNormalizado[]): any[] {
