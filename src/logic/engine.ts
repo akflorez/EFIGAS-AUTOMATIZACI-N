@@ -186,10 +186,12 @@ export class ProcessingEngine {
     const idCausal = this.extractCode(causalRaw);
     const cleanLabel = causalRaw.replace(idCausal, '').replace(/^[-\s]+/, '').trim().toUpperCase();
     const normCausal = this.normalizeText(causalRaw);
+    
     const perfilFromMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(normCausal);
     const perfil = (perfilFromMaestro || cleanLabel || 'REVISIÓN MANUAL').toString().toUpperCase().trim();
+    
     const mappedMotDescription = this.terMotivoToCVSMap.get(idCausal) || this.terMotivoToCVSMap.get(normCausal);
-    const motivoNP = (mappedMotDescription || `${cleanLabel} ${idCausal}`).trim().toUpperCase();
+    const motivoNP = (mappedMotDescription || cleanLabel).trim().toUpperCase();
 
     return {
       id_sistema: `MOV-${product}-${Math.random()}`,
@@ -203,7 +205,7 @@ export class ProcessingEngine {
       codigo_tipo_comentario: '',
       motivo_no_pago_original: causalRaw,
       motivo_no_pago_consolidado: motivoNP,
-      fecha_gestion: date || new Date().toISOString().split('T')[0],
+      fecha_gestion: date,
       estado_cruce: 'automatico',
       estado_homologacion: perfilFromMaestro ? 'exitosa' : 'pendiente',
       editado_manualmente: false,
@@ -236,7 +238,7 @@ export class ProcessingEngine {
     const perfil = (perfilRaw || 'REVISIÓN MANUAL').toString().toUpperCase().trim();
     const mappedMotDescription = this.terMotivoToCVSMap.get(codeM) || this.terMotivoToCVSMap.get(normM);
     const cleanLabel = motivoRaw.replace(codeM, '').replace(/^[-\s]+/, '').trim().toUpperCase();
-    const motivoCVS = (mappedMotDescription || `${cleanLabel} ${codeM}`).trim().toUpperCase();
+    const motivoCVS = (mappedMotDescription || cleanLabel).trim().toUpperCase();
     const obs = this.safeString(this.getFieldValue(row, ["OBSERVACIONES", "DETALLE", "GESTION"])).toUpperCase();
 
     return {
