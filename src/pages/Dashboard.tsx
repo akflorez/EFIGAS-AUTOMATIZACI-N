@@ -40,16 +40,15 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
         const wb = XLSX.read(bstr, { type: 'binary' });
         
         if (type === 'master') {
-          // DETECCIÓN PROFUNDA: Buscamos la hoja que tenga más columnas (la real)
+          // DETECCIÓN POR VOLUMEN: La hoja con más filas es la Base General real
           let bestSheet = wb.SheetNames[0];
-          let maxCols = 0;
+          let maxRows = 0;
           
           wb.SheetNames.forEach(name => {
             const sheet = wb.Sheets[name];
-            const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1:A1');
-            const colCount = range.e.c - range.s.c;
-            if (colCount > maxCols) {
-              maxCols = colCount;
+            const data = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+            if (data.length > maxRows) {
+              maxRows = data.length;
               bestSheet = name;
             }
           });
@@ -126,7 +125,7 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
 
       <main className={`flex-1 ${isSidebarCollapsed ? 'ml-20' : 'ml-72'} p-10`}>
         <header className="flex justify-between items-center mb-10">
-           <h2 className="text-3xl font-black">Efigas Dashboard v14.12</h2>
+           <h2 className="text-3xl font-black">Efigas Dashboard v14.13</h2>
            <div className="bg-white px-4 py-2 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3"><UserIcon size={18} /> <span className="font-bold text-sm">Operador Senior</span></div>
         </header>
 
