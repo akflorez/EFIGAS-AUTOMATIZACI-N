@@ -33,35 +33,22 @@ export class ProcessingEngine {
   public async indexBaseGeneral(data: any[][], _onProgress: any) {
     if (!data || data.length === 0) return;
     
-    let headerIdx = -1;
-    // Buscamos en todo el archivo la fila que parezca cabecera
-    for (let i = 0; i < Math.min(data.length, 1000); i++) {
-        const rowData = data[i] || [];
-        const rowStr = rowData.map(v => this.normalize(v));
-        if (rowStr.some(v => v.includes('contrato') || v.includes('producto') || v.includes('cuenta') || v.includes('suscriptor'))) {
-            headerIdx = i;
-            rowStr.forEach((val, idx) => {
-                const pure = val.replace(/\s+/g, '');
-                if (pure.includes('contrato')) this.colIdxContrato = idx;
-                if (pure.includes('producto') || pure.includes('cuenta')) this.colIdxProducto = idx;
-                if (pure.includes('cedula') || pure.includes('identificacion')) this.colIdxCedula = idx;
-                if (pure.includes('nombre') || pure.includes('cliente')) this.colIdxNombre = idx;
-            });
-            // Si después de buscar, los índices siguen siendo por defecto o no se encontraron, se mantienen los fijos (5 y 14)
-            break;
-        }
-    }
-
-    if (this.colIdxCedula === -1) this.colIdxCedula = 14;
-
-    for (let i = headerIdx + 1; i < data.length; i++) {
+    for (let i = 0; i < data.length; i++) {
         const row = data[i];
         if (!row || !Array.isArray(row)) continue;
-        const keyProduct = this.normalizeProductKey(row[this.colIdxProducto]);
-        const keyContract = this.normalizeProductKey(row[this.colIdxContrato]);
+        
+        const rawP = this.safeStr(row[5]); // Columna F exacta
+        const rawC = this.safeStr(row[4]); // Columna E exacta
+        
+        // Si es la fila de encabezado literal, la saltamos
+        if (this.normalize(rawP).includes('producto')) continue;
+        if (this.normalize(rawC).includes('contrato')) continue;
+
+        const keyProduct = this.normalizeProductKey(rawP);
+        const keyContract = this.normalizeProductKey(rawC);
         
         if (keyProduct) this.baseGeneral.set(keyProduct, row);
-        if (keyContract) this.baseGeneral.set(keyContract, row);
+        else if (keyContract) this.baseGeneral.set(keyContract, row);
     }
   }
 
@@ -138,7 +125,7 @@ export class ProcessingEngine {
             codigo_causal: idCausal,
             motivo_no_pago_original: causalRaw,
             motivo_no_pago_consolidado: motivoNP,
-            fecha_gestion: this.formatDate(this.getVal(row, ["Fecha de Ejecutada", "Completada"])) || '',
+            fecha_gestion: this.formatDate(row["Fecha de Completación"] || this.getVal(row, ["Fecha de Completación", "Fecha de Ejecutada", "Completada"])) || '',
             perfil_maestro: (this.movCausalToPerfilMap.get(idCausal) || cleanLabel || 'REVISIÓN MANUAL').toUpperCase(),
             identificacion_valida: !!base,
             fuente_principal: 'movilidad',
@@ -178,7 +165,7 @@ export class ProcessingEngine {
             codigo_causal: idCausal,
             motivo_no_pago_original: motivoRaw,
             motivo_no_pago_consolidado: motivoRaw.toUpperCase(),
-            fecha_gestion: this.formatDate(this.getVal(row, ["Timestamp", "Fecha"])) || '',
+            fecha_gestion: this.formatDate(row["Timestamp"] || row["timestamp"] || this.getVal(row, ["Timestamp", "Fecha"])) || '',
             perfil_maestro: (perfilMaestro || cleanCausal || 'REVISIÓN MANUAL').toUpperCase(),
             identificacion_valida: !!base,
             fuente_principal: 'terreno',
