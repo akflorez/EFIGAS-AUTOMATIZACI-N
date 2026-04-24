@@ -104,8 +104,10 @@ export class ProcessingEngine {
     if (mov) mov.forEach(row => {
         const rawProduct = this.safeStr(this.getVal(row, ["Producto", "Contrato", "CUENTA"]));
         const productKey = this.normalizeProductKey(rawProduct);
-        const causalRaw = this.safeStr(this.getVal(row, ["Causal"]));
-        if (!productKey) return;
+        const causalRaw = this.safeStr(this.getVal(row, ["Causal", "Motivo"]));
+        
+        // REGLA: Si no hay causal (gestión), se salta el registro
+        if (!productKey || !causalRaw || causalRaw === '0') return;
 
         const base = this.baseGeneral.get(productKey);
         const idCausal = this.extractCode(causalRaw);

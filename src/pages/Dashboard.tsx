@@ -40,17 +40,22 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
         const wb = XLSX.read(bstr, { type: 'binary' });
         
         if (type === 'master') {
-          // Búsqueda mucho más flexible de la Base General
-          let baseSheetName = wb.SheetNames.find(n => {
-            const up = n.toUpperCase();
-            return up.includes('BASE') || up.includes('GENERAL') || up.includes('EFIGAS') || up.includes('MAESTRO');
-          });
-          // Si no encuentra por nombre, toma la primera hoja que tenga algo de datos
-          if (!baseSheetName) baseSheetName = wb.SheetNames[0];
-
-          const convSheetName = wb.SheetNames.find(n => n.toUpperCase().includes('CONV')) || wb.SheetNames[1] || wb.SheetNames[0];
+          // DETECCIÓN PROFUNDA: Buscamos la hoja que tenga más columnas (la real)
+          let bestSheet = wb.SheetNames[0];
+          let maxCols = 0;
           
-          const baseData = XLSX.utils.sheet_to_json(wb.Sheets[baseSheetName], { header: 1 });
+          wb.SheetNames.forEach(name => {
+            const sheet = wb.Sheets[name];
+            const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1:A1');
+            const colCount = range.e.c - range.s.c;
+            if (colCount > maxCols) {
+              maxCols = colCount;
+              bestSheet = name;
+            }
+          });
+
+          const convSheetName = wb.SheetNames.find(n => n.toUpperCase().includes('CONV')) || wb.SheetNames[1] || bestSheet;
+          const baseData = XLSX.utils.sheet_to_json(wb.Sheets[bestSheet], { header: 1 });
           const convData = XLSX.utils.sheet_to_json(wb.Sheets[convSheetName]);
 
           setFiles(prev => ({
@@ -121,7 +126,7 @@ export default function Dashboard({ onLogout }: { onLogout: () => void }) {
 
       <main className={`flex-1 ${isSidebarCollapsed ? 'ml-20' : 'ml-72'} p-10`}>
         <header className="flex justify-between items-center mb-10">
-           <h2 className="text-3xl font-black">Efigas Dashboard v14.6</h2>
+           <h2 className="text-3xl font-black">Efigas Dashboard v14.7</h2>
            <div className="bg-white px-4 py-2 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-3"><UserIcon size={18} /> <span className="font-bold text-sm">Operador Senior</span></div>
         </header>
 
