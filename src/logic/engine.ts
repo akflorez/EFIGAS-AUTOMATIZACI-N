@@ -24,7 +24,6 @@ export class ProcessingEngine {
 
   private normalizeProductKey(s: any): string {
     if (!s) return "";
-    // Limpieza estándar de Efigas: quitar ceros, espacios y el .0 de Excel
     return s.toString().trim().replace(/\.0$/, '').replace(/^0+/, '');
   }
 
@@ -39,7 +38,6 @@ export class ProcessingEngine {
     for (let i = 0; i < Math.min(data.length, 300); i++) {
         const rowData = data[i] || [];
         const rowStr = rowData.map(v => this.normalize(v));
-        // Prioridad alta a términos de contrato/producto
         if (rowStr.some(v => v === 'contrato' || v === 'producto' || v === 'suscriptor' || v === 'cuenta')) {
             headerIdx = i;
             rowStr.forEach((val, idx) => {
@@ -47,7 +45,8 @@ export class ProcessingEngine {
                   if (this.colIdxContrato === -1 || val === 'contrato' || val === 'producto') this.colIdxContrato = idx;
                 }
                 if (val.includes('nombre') || val.includes('cliente')) this.colIdxNombre = idx;
-                if (val.includes('cedula') || val.includes('identificacion') || val.includes('documento')) {
+                // Forzamos columna O (14) pero también buscamos por nombre 'cedula' con espacios
+                if (val.includes('cedula') || val.includes('identificacion') || idx === 14) {
                     this.colIdxCedula = idx;
                 }
                 if (val.includes('direccion')) this.colIdxDireccion = idx;
@@ -56,9 +55,7 @@ export class ProcessingEngine {
         }
     }
 
-    // Si no encuentra cabecera, asumimos columna 0 o 1
     const keyIdx = this.colIdxContrato !== -1 ? this.colIdxContrato : 0;
-    
     for (let i = headerIdx + 1; i < data.length; i++) {
         const row = data[i];
         if (!row || !Array.isArray(row)) continue;
@@ -104,28 +101,23 @@ export class ProcessingEngine {
   public processAll(mov: any[], ter: any[], start?: string, end?: string): RegistroNormalizado[] {
     const resultados: RegistroNormalizado[] = [];
     
+    // MOVILIDAD: Lógica de 8 columnas y formato DESC COD
     if (mov) mov.forEach(row => {
         const rawProduct = this.safeStr(this.getVal(row, ["Producto", "CUENTA", "CONTRATO", "SUSCRIPTOR"]));
         const productKey = this.normalizeProductKey(rawProduct);
-        const causalRaw = this.safeStr(this.getVal(row, ["Causal", "Motivo", "Causales"]));
+        const causalRaw = this.safeStr(this.getVal(row, ["Causal", "Motivo"]));
         
         if (!productKey || !causalRaw || causalRaw === '0') return;
 
         const base = this.baseGeneral.get(productKey);
         const idCausal = this.extractCode(causalRaw);
+        const observacion = this.safeStr(this.getVal(row, ["Observacion", "OBSERVACIONES", "DETALLE"])).toUpperCase();
         
-        // LIMPIEZA DE PREFIJOS: Quitamos "GAS, XXXX-" o cualquier cadena similar al inicio
-        const cleanCausal = causalRaw
-            .replace(/^[A-Z,\s]+\d+[-]/, '') // Quita "GAS, 8993-"
-            .replace(idCausal, '') // Quita el código si se repite
-            .replace(/^[-\s,]+/, '') // Quita basura sobrante al inicio
-            .trim().toUpperCase();
-        
+        // Sumamos las 8 columnas de 'Tipo de Comentario' y formateamos DESC COD
+        const motivoNP = this.collectAndReformatMobilityMotive(row);
+
+        const cleanLabel = causalRaw.replace(idCausal, '').replace(/^[-\s]+/, '').trim().toUpperCase();
         const perfilMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(this.normalize(causalRaw));
-        const comments = this.collectComments(row);
-        
-        // El motivo final es la descripción limpia + código al final
-        const motivoNP = `${comments || cleanCausal} ${idCausal}`.trim().toUpperCase();
 
         resultados.push({
             id_sistema: `MOV-${productKey}-${Math.random()}`,
@@ -135,22 +127,24 @@ export class ProcessingEngine {
             direccion: base ? this.safeStr(base[this.colIdxDireccion]) : '',
             cedula_maestra: base ? this.safeStr(base[this.colIdxCedula]) : '',
             telefono_maestro: this.safeStr(this.getVal(row, ["celular", "telefono"])),
-            causal: motivoNP,
+            causal: observacion || cleanLabel, // Gestion se llena de Observacion
             codigo_causal: idCausal,
             motivo_no_pago_original: causalRaw,
-            motivo_no_pago_consolidado: motivoNP,
+            motivo_no_pago_consolidado: motivoNP || cleanLabel,
             fecha_gestion: this.formatDate(this.getVal(row, ["Fecha", "Completada"])) || '',
-            perfil_maestro: (perfilMaestro || cleanCausal || 'REVISIÓN MANUAL').toUpperCase(),
+            perfil_maestro: (perfilMaestro || cleanLabel || 'REVISIÓN MANUAL').toUpperCase(),
             identificacion_valida: !!base,
             fuente_principal: 'movilidad',
-            estado_cruce: 'automatico', estado_homologacion: perfilMaestro ? 'exitosa' : 'pendiente', editado_manualmente: false, comentarios_concatenados: comments, motivo_error: '', tipo_comentario: '', codigo_tipo_comentario: ''
+            estado_cruce: 'automatico', estado_homologacion: perfilMaestro ? 'exitosa' : 'pendiente', editado_manualmente: false, comentarios_concatenados: '', motivo_error: '', tipo_comentario: '', codigo_tipo_comentario: ''
         });
     });
 
+    // TERRENO: Dejar motivo TAL CUAL
     if (ter) ter.forEach(row => {
         const rawProduct = this.safeStr(this.getVal(row, ["PRODUCTO", "CONTRATO", "CUENTA"]));
         const productKey = this.normalizeProductKey(rawProduct);
         const motivoRaw = this.safeStr(this.getVal(row, ["MOTIVO DE NO PAGO", "MOTIVO"]));
+        const observacion = this.safeStr(this.getVal(row, ["OBSERVACION", "OBSERVACIONES", "DETALLE"])).toUpperCase();
         const date = this.formatDate(this.getVal(row, ["Timestamp", "Fecha"])) || '';
         
         if (!productKey || !motivoRaw || motivoRaw === '0') return;
@@ -159,8 +153,7 @@ export class ProcessingEngine {
 
         const base = this.baseGeneral.get(productKey);
         const idCausal = this.extractCode(motivoRaw);
-        const cleanCausal = motivoRaw.replace(/^[A-Z,\s]+\d+[-]/, '').replace(idCausal, '').replace(/^[-\s,]+/, '').trim().toUpperCase();
-        
+        const cleanCausal = motivoRaw.replace(idCausal, '').replace(/^[-\s,]+/, '').trim().toUpperCase();
         const perfilMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(this.normalize(motivoRaw));
         const mappedMotivo = this.terMotivoToCVSMap.get(idCausal) || this.terMotivoToCVSMap.get(this.normalize(motivoRaw));
 
@@ -172,10 +165,10 @@ export class ProcessingEngine {
             direccion: base ? this.safeStr(base[this.colIdxDireccion]) : '',
             cedula_maestra: base ? this.safeStr(base[this.colIdxCedula]) : '',
             telefono_maestro: this.safeStr(this.getVal(row, ["celular", "telefono"])),
-            causal: (mappedMotivo || `${cleanCausal} ${idCausal}`).trim().toUpperCase(),
+            causal: observacion || cleanCausal, // Gestion se llena de Observacion
             codigo_causal: idCausal,
             motivo_no_pago_original: motivoRaw,
-            motivo_no_pago_consolidado: (mappedMotivo || `${cleanCausal} ${idCausal}`).trim().toUpperCase(),
+            motivo_no_pago_consolidado: motivoRaw.toUpperCase(), // Se deja TAL CUAL
             fecha_gestion: date,
             perfil_maestro: (perfilMaestro || 'REVISIÓN MANUAL').toUpperCase(),
             identificacion_valida: !!base,
@@ -187,15 +180,20 @@ export class ProcessingEngine {
     return resultados;
   }
 
-  private collectComments(row: any): string {
+  private collectAndReformatMobilityMotive(row: any): string {
     const vals = Object.entries(row)
-        .filter(([k]) => {
-            const nk = this.normalize(k);
-            return (nk.includes('coment') || nk.includes('tipo')) && !nk.includes('causal');
-        })
+        .filter(([k]) => this.normalize(k).includes('tipocomentario') || this.normalize(k).includes('tipo'))
         .map(([_, v]) => this.safeStr(v))
         .filter(v => v.length > 2 && v !== '0' && v !== '-');
-    return vals.join(', ').toUpperCase();
+    
+    const reformatted = vals.map(v => {
+        // Buscar patrón CODIGO-DESCRIPCION para invertirlo
+        const match = v.match(/^(\d+)[-\s]+(.+)$/);
+        if (match) return `${match[2].trim()} ${match[1].trim()}`;
+        return v;
+    });
+
+    return reformatted.join(', ').toUpperCase();
   }
 
   private formatDate(val: any): string {
