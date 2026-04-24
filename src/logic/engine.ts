@@ -30,21 +30,15 @@ export class ProcessingEngine {
     return (val || "").toString().trim();
   }
 
-  private masterCleanMotivo(val: string): string {
-    if(!val) return "";
-    // Limpieza radical para que NUNCA aparezca GAS o BRILLA
-    let clean = val.replace(/^(GAS|BRILLA|EFIGAS|SURTIGAS|STG|GASES|EMDECOB)\s*,?\s*/i, "").trim();
-    return clean.replace(/^[\s,.-]+/, '').trim().toUpperCase();
-  }
-
   public async indexBaseGeneral(data: any[][], _onProgress: any) {
     if (!data || data.length === 0) return;
     
     let headerIdx = -1;
-    for (let i = 0; i < Math.min(data.length, 500); i++) {
+    // Buscamos en todo el archivo la fila que parezca cabecera
+    for (let i = 0; i < Math.min(data.length, 1000); i++) {
         const rowData = data[i] || [];
         const rowStr = rowData.map(v => this.normalize(v));
-        if (rowStr.some(v => v.includes('contrat') || v.includes('product') || v.includes('cuenta'))) {
+        if (rowStr.some(v => v.includes('contrato') || v.includes('producto') || v.includes('cuenta') || v.includes('suscriptor'))) {
             headerIdx = i;
             rowStr.forEach((val, idx) => {
                 const pure = val.replace(/\s+/g, '');
@@ -63,8 +57,11 @@ export class ProcessingEngine {
     for (let i = headerIdx + 1; i < data.length; i++) {
         const row = data[i];
         if (!row || !Array.isArray(row)) continue;
-        const key = this.normalizeProductKey(row[keyIdx]);
-        if (key) this.baseGeneral.set(key, row);
+        const keyProduct = this.normalizeProductKey(row[this.colIdxProducto]);
+        const keyContract = this.normalizeProductKey(row[this.colIdxContrato]);
+        
+        if (keyProduct) this.baseGeneral.set(keyProduct, row);
+        if (keyContract) this.baseGeneral.set(keyContract, row);
     }
   }
 
@@ -85,7 +82,8 @@ export class ProcessingEngine {
   }
 
   private extractCode(s: string): string {
-    const m = s.match(/(\d{3,5})/);
+    if (!s) return '';
+    const m = s.toString().match(/(\d{3,5})/);
     return m ? m[1] : '';
   }
 
@@ -103,74 +101,75 @@ export class ProcessingEngine {
   public processAll(mov: any[], ter: any[], start?: string, end?: string): RegistroNormalizado[] {
     const resultados: RegistroNormalizado[] = [];
     
-    // MOVILIDAD: Bloqueo de columna "Causal" para el motivo consolidado
+    // MOVILIDAD: Basado en estructura real detectada
     if (mov) mov.forEach(row => {
-        const rawProduct = this.safeStr(this.getVal(row, ["Producto", "CUENTA", "CONTRATO"]));
+        const rawProduct = this.safeStr(this.getVal(row, ["Producto", "Contrato", "CUENTA"]));
         const productKey = this.normalizeProductKey(rawProduct);
-        const causalRaw = this.safeStr(this.getVal(row, ["Causal", "Motivo"]));
+        const causalRaw = this.safeStr(this.getVal(row, ["Causal"]));
         if (!productKey) return;
 
         const base = this.baseGeneral.get(productKey);
         const idCausal = this.extractCode(causalRaw);
-        const observacion = this.safeStr(this.getVal(row, ["Observacion", "Detalle"])).toUpperCase();
-        const telMarcado = this.safeStr(this.getVal(row, ["Celular de persona que atendió", "Celular"]));
+        const observacion = this.safeStr(this.getVal(row, ["Observación", "Detalle"])).toUpperCase();
+        
+        // Columna Exacta: "Celular de persona que atendió"
+        const telMarcado = this.safeStr(row["Celular de persona que atendió"] || this.getVal(row, ["Celular", "Telefono"]));
 
-        // Solo usamos "Tipo de Comentario" para el motivo consolidado
+        // Concatenación de "Tipo de comentario" y volteo
         const motivoNP = this.collectCleanUniqueMobilityMotive(row);
-        const cleanLabel = this.masterCleanMotivo(causalRaw.replace(idCausal, '').trim());
-        const perfilMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(this.normalize(causalRaw));
 
         resultados.push({
             id_sistema: `MOV-${productKey}-${Math.random()}`,
             contrato: base ? this.safeStr(base[this.colIdxContrato]) : '',
             producto: rawProduct.toString().replace(/\.0$/, ''),
             cliente: base ? this.safeStr(base[this.colIdxNombre] || 'CLIENTE EFIGAS') : 'PRODUCTO NO ENCONTRADO EN MASTER',
-            direccion: base ? this.safeStr(base[this.colIdxNombre + 1] || base[2]) : '',
+            direccion: base ? this.safeStr(base[this.colIdxProducto + 1] || base[5] || base[2]) : '',
             cedula_maestra: base ? this.safeStr(base[this.colIdxCedula]) : '',
             telefono_maestro: telMarcado,
-            causal: observacion || cleanLabel,
+            causal: observacion || motivoNP,
             codigo_causal: idCausal,
             motivo_no_pago_original: causalRaw,
-            motivo_no_pago_consolidado: (motivoNP || cleanLabel),
-            fecha_gestion: this.formatDate(this.getVal(row, ["Fecha", "Completada"])) || '',
-            perfil_maestro: (perfilMaestro || cleanLabel || 'REVISIÓN MANUAL').toUpperCase(),
+            motivo_no_pago_consolidated: motivoNP,
+            fecha_gestion: this.formatDate(this.getVal(row, ["Fecha de Ejecutada", "Completada"])) || '',
+            perfil_maestro: (this.movCausalToPerfilMap.get(idCausal) || 'REVISIÓN MANUAL').toUpperCase(),
             identificacion_valida: !!base,
             fuente_principal: 'movilidad',
-            estado_cruce: 'automatico', estado_homologacion: perfilMaestro ? 'exitosa' : 'pendiente', editado_manualmente: false, comentarios_concatenados: '', motivo_error: '', tipo_comentario: '', codigo_tipo_comentario: ''
+            estado_cruce: 'automatico', estado_homologacion: 'pendiente', editado_manualmente: false, comentarios_concatenados: '', motivo_error: '', tipo_comentario: '', codigo_tipo_comentario: ''
         });
     });
 
-    // TERRENO
+    // TERRENO: Basado en estructura real detectada
     if (ter) ter.forEach(row => {
-        const rawProduct = this.safeStr(this.getVal(row, ["PRODUCTO", "CONTRATO", "CUENTA"]));
+        const rawProduct = this.safeStr(this.getVal(row, ["PRODUCTO", "Contrato", "CUENTA"]));
         const productKey = this.normalizeProductKey(rawProduct);
-        const motivoRaw = this.safeStr(this.getVal(row, ["MOTIVO DE NO PAGO", "MOTIVO"]));
-        const observacion = this.safeStr(this.getVal(row, ["OBSERVACION", "DETALLE"])).toUpperCase();
-        const telMarcado = this.safeStr(this.getVal(row, ["TELEFONO NUEVO", "Telefono"]));
+        const motivoRaw = this.safeStr(this.getVal(row, ["Motivo de no pago", "MOTIVO"]));
+        const observacion = this.safeStr(this.getVal(row, ["Observación", "Detalle"])).toUpperCase();
+        
+        // Columna Exacta: "TELEFONO NUEVO"
+        const telMarcado = this.safeStr(row["TELEFONO NUEVO"] || this.getVal(row, ["Telefono"]));
         
         if (!productKey) return;
         const base = this.baseGeneral.get(productKey);
         const idCausal = this.extractCode(motivoRaw);
-        const cleanCausal = this.masterCleanMotivo(motivoRaw.replace(idCausal, '').trim());
         const perfilMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(this.normalize(motivoRaw));
 
         resultados.push({
             id_sistema: `TER-${productKey}-${Math.random()}`,
             contrato: base ? this.safeStr(base[this.colIdxContrato]) : '',
             producto: rawProduct.toString().replace(/\.0$/, ''),
-            cliente: base ? this.safeStr(base[this.colIdxNombre]) : 'PRODUCTO NO ENCONTRADO EN MASTER',
-            direccion: base ? this.safeStr(base[this.colIdxNombre + 1] || base[2]) : '',
+            cliente: base ? this.safeStr(base[this.colIdxNombre] || 'CLIENTE EFIGAS') : 'PRODUCTO NO ENCONTRADO EN MASTER',
+            direccion: base ? this.safeStr(base[this.colIdxProducto + 1] || base[5] || base[2]) : '',
             cedula_maestra: base ? this.safeStr(base[this.colIdxCedula]) : '',
             telefono_maestro: telMarcado,
-            causal: observacion || cleanCausal,
+            causal: observacion || motivoRaw,
             codigo_causal: idCausal,
             motivo_no_pago_original: motivoRaw,
-            motivo_no_pago_consolidado: cleanCausal || motivoRaw.toUpperCase(),
+            motivo_no_pago_consolidated: motivoRaw.toUpperCase(),
             fecha_gestion: this.formatDate(this.getVal(row, ["Timestamp", "Fecha"])) || '',
             perfil_maestro: (perfilMaestro || 'REVISIÓN MANUAL').toUpperCase(),
             identificacion_valida: !!base,
             fuente_principal: 'terreno',
-            estado_cruce: 'automatico', estado_homologacion: perfilMaestro ? 'exitosa' : 'pendiente', editado_manualmente: false, comentarios_concatenados: '', motivo_error: '', tipo_comentario: '', codigo_tipo_comentario: ''
+            estado_cruce: 'automatico', estado_homologacion: 'pendiente', editado_manualmente: false, comentarios_concatenados: '', motivo_error: '', tipo_comentario: '', codigo_tipo_comentario: ''
         });
     });
 
@@ -180,12 +179,11 @@ export class ProcessingEngine {
   private collectCleanUniqueMobilityMotive(row: any): string {
     const uniqueVals = new Set<string>();
     Object.entries(row).forEach(([k, v]) => {
-        const nk = k.toLowerCase();
-        // Solo columnas que digan explícitamente "Tipo de comentario"
-        if (nk.includes('tipo de comentario')) {
+        if (k.toLowerCase().includes('tipo de comentario')) {
             const val = this.safeStr(v);
             if (val.length > 2 && val !== '0' && val !== '-') {
-                let clean = this.masterCleanMotivo(val);
+                // De 1478-Negociacion a NEGOCIACION 1478
+                let clean = val.replace(/^(GAS|BRILLA|EFIGAS|SURTIGAS)\s*,?\s*/i, "").trim();
                 const match = clean.match(/^(\d+)[-\s]+(.+)$/);
                 if (match) uniqueVals.add(`${match[2].trim()} ${match[1].trim()}`);
                 else uniqueVals.add(clean.toUpperCase());
@@ -216,7 +214,7 @@ export class ProcessingEngine {
       'fechagestion': r.fecha_gestion,
       'accion': 'VISITA',
       'perfil': r.perfil_maestro,
-      'motivonopago': r.motivo_no_pago_consolidado,
+      'motivonopago': r.motivo_no_pago_consolidated || r.motivo_no_pago_original,
       'numeromarcado': r.telefono_maestro,
       'identificacion': r.cedula_maestra,
       'cuenta': r.producto,
