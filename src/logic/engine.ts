@@ -9,7 +9,7 @@ export class ProcessingEngine {
   
   private colIdxContrato = -1;
   private colIdxNombre = -1;
-  private colIdxCedula = -1;
+  private colIdxCedula = 14; // Forzamos por defecto a la Columna O (índice 14)
   private colIdxDireccion = -1;
 
   public stats = {
@@ -30,6 +30,7 @@ export class ProcessingEngine {
     if (!data || data.length === 0) return;
     
     let headerIdx = -1;
+    // Buscamos la cabecera en las primeras 150 filas
     for (let i = 0; i < Math.min(data.length, 150); i++) {
         const row = data[i] || [];
         const rowStr = row.map(v => this.normalize(v));
@@ -38,10 +39,9 @@ export class ProcessingEngine {
             rowStr.forEach((val, idx) => {
                 if (val.includes('contrato') || val.includes('cuenta')) this.colIdxContrato = idx;
                 if (val.includes('nombre') || val.includes('cliente')) this.colIdxNombre = idx;
-                if (val.includes('cedula') || val.includes('identificacion') || idx === 14) {
-                   if (this.colIdxCedula === -1 || val.includes('cedula') || val.includes('identificacion')) {
-                     this.colIdxCedula = idx;
-                   }
+                // Si el nombre dice claramente identificación o cédula, usamos ese índice. Si no, prevalece el 14.
+                if (val.includes('cedula') || val.includes('identificacion') || val.includes('documento')) {
+                    this.colIdxCedula = idx;
                 }
                 if (val.includes('direccion')) this.colIdxDireccion = idx;
             });
@@ -49,8 +49,7 @@ export class ProcessingEngine {
         }
     }
 
-    if (this.colIdxCedula === -1) this.colIdxCedula = 14; 
-
+    // Indexamos desde después de la cabecera
     for (let i = headerIdx + 1; i < data.length; i++) {
         const row = data[i];
         if (!row || !Array.isArray(row)) continue;
@@ -96,7 +95,6 @@ export class ProcessingEngine {
   public processAll(mov: any[], ter: any[], start?: string, end?: string): RegistroNormalizado[] {
     const resultados: RegistroNormalizado[] = [];
     
-    // MOVILIDAD: Prioridad en concatenación y código al final
     if (mov) mov.forEach(row => {
         const product = this.safeStr(this.getVal(row, ["Producto", "CUENTA", "CONTRATO"])).replace(/\.0$/, '');
         const causalRaw = this.safeStr(this.getVal(row, ["Causal", "Motivo"]));
@@ -107,9 +105,12 @@ export class ProcessingEngine {
         const cleanLabel = causalRaw.replace(idCausal, '').replace(/^[-\s]+/, '').trim().toUpperCase();
         const perfilMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(this.normalize(causalRaw));
         
-        // Motivo no pago: Concatenar comentarios (incluyendo Tipo Comentario) + Código al final
+        // Sumamos comentarios (incluyendo Tipo Comentario)
         const comments = this.collectComments(row);
-        const motivoNP = `${comments} ${idCausal}`.trim().toUpperCase();
+        // Si hay comentarios, los usamos; si no, usamos la etiqueta limpia de la causal. SIEMPRE código al final.
+        const motivoNP = comments 
+            ? `${comments} ${idCausal}`.trim().toUpperCase() 
+            : `${cleanLabel} ${idCausal}`.trim().toUpperCase();
 
         resultados.push({
             id_sistema: `MOV-${product}-${Math.random()}`,
@@ -117,9 +118,9 @@ export class ProcessingEngine {
             producto: product,
             cliente: base ? this.safeStr(base[this.colIdxNombre]) : '',
             direccion: base ? this.safeStr(base[this.colIdxDireccion]) : '',
-            cedula_maestra: base && this.colIdxCedula !== -1 ? this.safeStr(base[this.colIdxCedula]) : '',
+            cedula_maestra: base ? this.safeStr(base[this.colIdxCedula]) : '',
             telefono_maestro: this.safeStr(this.getVal(row, ["celular", "telefono"])),
-            causal: comments || cleanLabel, // Esto se refleja en la columna 'gestion' del CSV
+            causal: comments || cleanLabel,
             codigo_causal: idCausal,
             motivo_no_pago_original: causalRaw,
             motivo_no_pago_consolidado: motivoNP,
@@ -151,7 +152,7 @@ export class ProcessingEngine {
             producto: product,
             cliente: base ? this.safeStr(base[this.colIdxNombre]) : '',
             direccion: base ? this.safeStr(base[this.colIdxDireccion]) : '',
-            cedula_maestra: base && this.colIdxCedula !== -1 ? this.safeStr(base[this.colIdxCedula]) : '',
+            cedula_maestra: base ? this.safeStr(base[this.colIdxCedula]) : '',
             telefono_maestro: this.safeStr(this.getVal(row, ["celular", "telefono"])),
             causal: this.safeStr(this.getVal(row, ["OBSERVACIONES", "DETALLE"])).toUpperCase() || cleanLabel,
             codigo_causal: idCausal,
