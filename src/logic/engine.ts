@@ -129,7 +129,7 @@ export class ProcessingEngine {
             causal: observacion || motivoNP,
             codigo_causal: idCausal,
             motivo_no_pago_original: causalRaw,
-            motivo_no_pago_consolidated: motivoNP,
+            motivo_no_pago_consolidado: motivoNP,
             fecha_gestion: this.formatDate(this.getVal(row, ["Fecha de Ejecutada", "Completada"])) || '',
             perfil_maestro: (this.movCausalToPerfilMap.get(idCausal) || 'REVISIÓN MANUAL').toUpperCase(),
             identificacion_valida: !!base,
