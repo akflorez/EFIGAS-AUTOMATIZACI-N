@@ -108,14 +108,14 @@ export default function ReviewTable({ data, onUpdate }: Props) {
                       value={reg.perfil_maestro || ''} 
                       onSave={(v) => onUpdate(reg.id_sistema, { perfil_maestro: v, editado_manualmente: true })} 
                     />
-                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Homologación v24</div>
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Homologación Perfil</div>
                   </div>
                 </td>
                 <td className="px-6 py-5">
                   <div className="flex flex-col gap-1.5">
                     <EditableField 
-                      value={reg.causal} 
-                      onSave={(v) => onUpdate(reg.id_sistema, { causal: v, editado_manualmente: true })} 
+                      value={reg.motivo_no_pago_consolidado} 
+                      onSave={(v) => onUpdate(reg.id_sistema, { motivo_no_pago_consolidado: v, editado_manualmente: true })} 
                     />
                     <div className="inline-flex items-center gap-1.5 py-0.5 px-2 bg-slate-100 rounded-md w-fit">
                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-tighter">COD:</span>

@@ -24,8 +24,8 @@ export class ProcessingEngine {
 
   private normalizeProductKey(s: any): string {
     if (!s) return "";
-    // Removemos todo lo que no sea número y quitamos ceros a la izquierda para asegurar el match
-    return s.toString().replace(/[^0-9]/g, '').replace(/^0+/, '').trim();
+    // Normalización agresiva: solo números y sin ceros a la izquierda
+    return s.toString().replace(/\.0$/, '').replace(/[^0-9]/g, '').replace(/^0+/, '').trim();
   }
 
   private safeStr(val: any): string {
@@ -36,10 +36,9 @@ export class ProcessingEngine {
     if (!data || data.length === 0) return;
     
     let headerIdx = -1;
-    // Buscamos la cabecera en un rango más amplio por si hay basura arriba
     for (let i = 0; i < Math.min(data.length, 300); i++) {
-        const row = data[i] || [];
-        const rowStr = row.map(v => this.normalize(v));
+        const rowData = data[i] || [];
+        const rowStr = rowData.map(v => this.normalize(v));
         if (rowStr.some(v => v.includes('producto') || v.includes('contrato') || v.includes('cuenta') || v.includes('suscriptor'))) {
             headerIdx = i;
             rowStr.forEach((val, idx) => {
@@ -47,7 +46,6 @@ export class ProcessingEngine {
                   if (this.colIdxContrato === -1 || val.includes('contrato')) this.colIdxContrato = idx;
                 }
                 if (val.includes('nombre') || val.includes('cliente')) this.colIdxNombre = idx;
-                // Si el nombre dice claramente documento o cédula, lo marcamos, sino nos quedamos con la Col O (14)
                 if (val.includes('cedula') || val.includes('identificacion') || val.includes('documento')) {
                     this.colIdxCedula = idx;
                 }
@@ -57,13 +55,11 @@ export class ProcessingEngine {
         }
     }
 
-    // Indexamos usando la llave normalizada (sin ceros a la izquierda)
-    const keyIdx = this.colIdxContrato !== -1 ? this.colIdxContrato : 1;
+    const keyIdx = this.colIdxContrato !== -1 ? this.colIdxContrato : 0;
     for (let i = headerIdx + 1; i < data.length; i++) {
         const row = data[i];
         if (!row || !Array.isArray(row)) continue;
-        const rawKey = this.safeStr(row[keyIdx]);
-        const key = this.normalizeProductKey(rawKey);
+        const key = this.normalizeProductKey(row[keyIdx]);
         if (key) this.baseGeneral.set(key, row);
     }
   }
@@ -105,7 +101,6 @@ export class ProcessingEngine {
   public processAll(mov: any[], ter: any[], start?: string, end?: string): RegistroNormalizado[] {
     const resultados: RegistroNormalizado[] = [];
     
-    // PROCESAR MOVILIDAD
     if (mov) mov.forEach(row => {
         const rawProduct = this.safeStr(this.getVal(row, ["Producto", "CUENTA", "CONTRATO", "SUSCRIPTOR"]));
         const productKey = this.normalizeProductKey(rawProduct);
@@ -119,7 +114,6 @@ export class ProcessingEngine {
         const cleanLabel = causalRaw.replace(idCausal, '').replace(/^[-\s]+/, '').trim().toUpperCase();
         const perfilMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(this.normalize(causalRaw));
         
-        // CONCATENACIÓN SOLICITADA: Incluye "Tipo de Comentario" y código al final
         const comments = this.collectComments(row);
         const labelBase = comments || cleanLabel;
         const motivoNP = `${labelBase} ${idCausal}`.trim().toUpperCase();
@@ -130,9 +124,9 @@ export class ProcessingEngine {
             producto: productShow,
             cliente: base ? this.safeStr(base[this.colIdxNombre]) : '',
             direccion: base ? this.safeStr(base[this.colIdxDireccion]) : '',
-            cedula_maestra: base && this.colIdxCedula !== -1 ? this.safeStr(base[this.colIdxCedula]) : '',
+            cedula_maestra: base ? this.safeStr(base[this.colIdxCedula]) : '',
             telefono_maestro: this.safeStr(this.getVal(row, ["celular", "telefono"])),
-            causal: labelBase.toUpperCase(),
+            causal: motivoNP,
             codigo_causal: idCausal,
             motivo_no_pago_original: causalRaw,
             motivo_no_pago_consolidado: motivoNP,
@@ -144,7 +138,6 @@ export class ProcessingEngine {
         });
     });
 
-    // PROCESAR TERRENO
     if (ter) ter.forEach(row => {
         const rawProduct = this.safeStr(this.getVal(row, ["PRODUCTO", "CONTRATO", "CUENTA"]));
         const productKey = this.normalizeProductKey(rawProduct);
@@ -152,7 +145,6 @@ export class ProcessingEngine {
 
         const motivoRaw = this.safeStr(this.getVal(row, ["MOTIVO DE NO PAGO", "MOTIVO"]));
         const date = this.formatDate(this.getVal(row, ["Timestamp", "Fecha"])) || '';
-        
         if (!productKey || !motivoRaw || motivoRaw === '0') return;
         if (start && date && date < start) return;
         if (end && date && date > end) return;
@@ -169,9 +161,9 @@ export class ProcessingEngine {
             producto: productShow,
             cliente: base ? this.safeStr(base[this.colIdxNombre]) : '',
             direccion: base ? this.safeStr(base[this.colIdxDireccion]) : '',
-            cedula_maestra: base && this.colIdxCedula !== -1 ? this.safeStr(base[this.colIdxCedula]) : '',
+            cedula_maestra: base ? this.safeStr(base[this.colIdxCedula]) : '',
             telefono_maestro: this.safeStr(this.getVal(row, ["celular", "telefono"])),
-            causal: (this.safeStr(this.getVal(row, ["OBSERVACIONES", "DETALLE"])) || cleanLabel).toUpperCase(),
+            causal: (mappedMotivo || `${cleanLabel} ${idCausal}`).trim().toUpperCase(),
             codigo_causal: idCausal,
             motivo_no_pago_original: motivoRaw,
             motivo_no_pago_consolidado: (mappedMotivo || `${cleanLabel} ${idCausal}`).trim().toUpperCase(),
