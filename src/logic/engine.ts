@@ -106,9 +106,14 @@ export class ProcessingEngine {
         const rawProduct = this.safeStr(this.getVal(row, ["Producto", "Contrato", "CUENTA"]));
         const productKey = this.normalizeProductKey(rawProduct);
         const causalRaw = this.safeStr(this.getVal(row, ["Causal", "Motivo"]));
-        
+        const date = this.formatDate(this.getVal(row, ["Fecha de Completación", "Fecha de Ejecutada", "Completada"])) || '';
+
         // REGLA: Si no hay causal (gestión), se salta el registro
         if (!productKey || !causalRaw || causalRaw === '0') return;
+        
+        // Filtro de Fecha para Movilidad (v14.11)
+        if (start && date && date < start) return;
+        if (end && date && date > end) return;
 
         const base = this.baseGeneral.get(productKey);
         const idCausal = this.extractCode(causalRaw);
@@ -198,7 +203,7 @@ export class ProcessingEngine {
             }
         }
     });
-    return Array.from(uniqueVals).join(', ');
+    return Array.from(uniqueVals).join(', ').toUpperCase();
   }
 
   private formatDate(val: any): string {
