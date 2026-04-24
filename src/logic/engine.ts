@@ -232,7 +232,7 @@ export class ProcessingEngine {
       'fechagestion': r.fecha_gestion,
       'accion': 'VISITA',
       'perfil': r.perfil_maestro,
-      'motivonopago': r.motivo_no_pago_consolidado || r.motivo_no_pago_original,
+      'motivonopago': r.motivo_no_pago_consolidado,
       'numeromarcado': r.telefono_maestro,
       'identificacion': r.cedula_maestra,
       'cuenta': r.producto,
