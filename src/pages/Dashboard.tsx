@@ -162,10 +162,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-left">
-               <FileCard title="Movilidad" icon={<Database size={24} />} status={files.movilidad} onUpload={(e) => handleFileUpload(e, 'movilidad')} onRemove={() => setFiles(p=>({...p, movilidad:{loaded:false,name:'',data:[]}}))} accent="blue" />
-               <FileCard title="Terreno" icon={<ClipboardList size={24} />} status={files.terreno} onUpload={(e) => handleFileUpload(e, 'terreno')} onRemove={() => setFiles(p=>({...p, terreno:{loaded:false,name:'',data:[]}}))} accent="emerald" />
-               <FileCard title="Master" icon={<AlertCircle size={24} />} status={files.master} onUpload={(e) => handleFileUpload(e, 'master')} onRemove={() => setFiles(p=>({...p, master:{loaded:false,name:'',data:[],secondaryData:[]}}))} accent="amber" />
-               <FileCard title="Maestro" icon={<Settings size={24} />} status={files.maestro} onUpload={(e) => handleFileUpload(e, 'maestro')} onRemove={() => setFiles(p=>({...p, maestro:{loaded:false,name:'',data:[]}}))} accent="slate" />
+               <FileCard title="Movilidad" icon={<Database size={24} />} status={files.movilidad} onUpload={(e) => handleFileUpload(e, 'movilidad')} onRemove={() => removeFile('movilidad')} accent="blue" />
+               <FileCard title="Terreno" icon={<ClipboardList size={24} />} status={files.terreno} onUpload={(e) => handleFileUpload(e, 'terreno')} onRemove={() => removeFile('terreno')} accent="emerald" />
+               <FileCard title="Master" icon={<AlertCircle size={24} />} status={files.master} onUpload={(e) => handleFileUpload(e, 'master')} onRemove={() => removeFile('master')} accent="amber" />
+               <FileCard title="Maestro" icon={<Settings size={24} />} status={files.maestro} onUpload={(e) => handleFileUpload(e, 'maestro')} onRemove={() => removeFile('maestro')} accent="slate" />
             </div>
 
             <section className="bg-white border-2 border-dashed border-slate-200 rounded-[2.5rem] p-12 text-center relative overflow-hidden shadow-inner">
@@ -210,7 +210,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                    <div><h3 className="text-2xl font-black">Generador de Informe de Gestión</h3><p className="text-slate-500 font-medium">Inyecta datos del Master en la Plantilla EMDECOB.</p></div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
-                   <FileCard title="Archivo Master" icon={<Database size={24} />} status={files.master} onUpload={(e) => handleFileUpload(e, 'master')} onRemove={() => setFiles(p=>({...p, master:{loaded:false,name:'',data:[],secondaryData:[]}}))} accent="amber" />
+                   <FileCard title="Archivo Master" icon={<Database size={24} />} status={files.master} onUpload={(e) => handleFileUpload(e, 'master')} onRemove={() => removeFile('master')} accent="amber" />
                    <div className="p-8 rounded-[2rem] border-2 border-dashed border-slate-100 bg-[#fafafa] flex items-center justify-center text-center"><p className="text-sm font-bold text-slate-400 italic">Plantilla Oficial Lista.<br/>Se completarán 15,000 filas de memoria.</p></div>
                 </div>
                 <div className="bg-[#0f172a] rounded-[2.5rem] p-10 text-white flex justify-between items-center shadow-2xl">
@@ -231,7 +231,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                      <button key={t} onClick={() => setSelectedLegalizationTipo(t === 'TODOS' ? ['1367', '1368', '1369'] : [t])} className={`p-5 rounded-2xl font-black transition-all border-2 ${selectedLegalizationTipo.includes(t) ? 'bg-amber-500 border-amber-600 text-slate-900 shadow-xl' : 'bg-slate-50 border-slate-50 text-slate-400'}`}>{t}</button>
                    ))}
                 </div>
-                <FileCard title="Base General (Cargar en Master)" icon={<Database size={24} />} status={files.master} onUpload={(e) => handleFileUpload(e, 'master')} onRemove={() => setFiles(p=>({...p, master:{loaded:false,name:'',data:[],secondaryData:[]}}))} accent="amber" />
+                <FileCard title="Base General (Cargar en Master)" icon={<Database size={24} />} status={files.master} onUpload={(e) => handleFileUpload(e, 'master')} onRemove={() => removeFile('master')} accent="amber" />
                 <button 
                   onClick={async () => {
                     if (!files.master.loaded) return alert('Carga la base');
