@@ -128,6 +128,7 @@ export class ProcessingEngine {
             telefono_maestro: telMarcado,
             causal: observacion || motivoNP,
             codigo_causal: idCausal,
+            motivo_no_pago_original: causalRaw,
             motivo_no_pago_consolidado: this.cleanTextNoAccents(motivoNP),
             fecha_gestion: this.formatDate(row["Fecha de Completación"] || this.getVal(row, ["Fecha de Completación", "Fecha de Ejecutada", "Completada"])) || '',
             perfil_maestro: (this.movCausalToPerfilMap.get(idCausal) || this.cleanTextNoAccents(cleanLabel) || 'REVISIÓN MANUAL').toUpperCase(),
