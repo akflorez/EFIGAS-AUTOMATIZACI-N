@@ -116,7 +116,12 @@ export class ProcessingEngine {
         const telMarcado = this.safeStr(row["Celular de persona que atendió"] || this.getVal(row, ["Celular", "Telefono"]));
 
         // Concatenación de "Tipo de comentario" y volteo
-        const motivoNP = this.collectCleanUniqueMobilityMotive(row);
+        let motivoNP = this.collectCleanUniqueMobilityMotive(row);
+        
+        // REGLA ESPECIAL (v14.21): 3607 y 3889 -> CLIENTE ILOCALIZADO
+        if (causalRaw.includes('3607') || causalRaw.includes('3889')) {
+            motivoNP = 'CLIENTE ILOCALIZADO';
+        }
 
         resultados.push({
             id_sistema: `MOV-${productKey}-${Math.random()}`,
