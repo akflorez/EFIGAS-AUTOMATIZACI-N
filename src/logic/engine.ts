@@ -97,7 +97,7 @@ export class ProcessingEngine {
     return undefined;
   }
 
-  public processAll(mov: any[], ter: any[]): RegistroNormalizado[] {
+  public processAll(mov: any[], ter: any[], start?: string, end?: string): RegistroNormalizado[] {
     const resultados: RegistroNormalizado[] = [];
     
     // MOVILIDAD: Basado en estructura real detectada
@@ -146,8 +146,12 @@ export class ProcessingEngine {
         
         // Columna Exacta: "TELEFONO NUEVO"
         const telMarcado = this.safeStr(row["TELEFONO NUEVO"] || this.getVal(row, ["Telefono"]));
+        const date = this.formatDate(this.getVal(row, ["Timestamp", "Fecha"])) || '';
         
         if (!productKey) return;
+        if (start && date && date < start) return;
+        if (end && date && date > end) return;
+
         const base = this.baseGeneral.get(productKey);
         const idCausal = this.extractCode(motivoRaw);
         const perfilMaestro = this.movCausalToPerfilMap.get(idCausal) || this.movCausalToPerfilMap.get(this.normalize(motivoRaw));
